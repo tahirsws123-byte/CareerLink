@@ -326,7 +326,6 @@ const accountPreferenceRows = [
   ["language-setting", "Language"],
   ["content-language", "Content language"],
   ["autoplay-videos", "Autoplay videos"],
-  ["sound-effects", "Sound effects"],
   ["profile-photos", "Showing profile photos"],
   ["feed-view", "Preferred feed view"],
   ["unfollowed-people", "People you unfollowed"],
@@ -452,7 +451,6 @@ export default function Settings() {
   const [activeSection, setActiveSection] = useState("account-preferences");
   const [activeDetail, setActiveDetail] = useState("");
   const [editIntroOpen, setEditIntroOpen] = useState(false);
-  const [soundEffects, setSoundEffects] = useState(() => localStorage.getItem("careerlink-sound-effects") !== "false");
   const [unfollowedPeople, setUnfollowedPeople] = useState([]);
   const [demographics, setDemographics] = useState({ genderIdentity: "", disabilityStatus: "" });
   const [savingDemographics, setSavingDemographics] = useState(false);
@@ -668,11 +666,6 @@ export default function Settings() {
   const updateTheme = (nextTheme) => setTheme(nextTheme);
 
   const openSetting = (detail) => navigate(`/settings#setting=${detail}`);
-
-  const updateSoundEffects = (checked) => {
-    localStorage.setItem("careerlink-sound-effects", String(checked));
-    setSoundEffects(checked);
-  };
 
   const savePreference = async (updates, onSaved, successMessage = "Setting saved") => {
     try {
@@ -977,7 +970,6 @@ export default function Settings() {
     "language-setting": preferredLanguage === "hi" ? t("Hindi (हिन्दी)") : t("English (English)"),
     "content-language": contentLanguage === "hi" ? t("Hindi (हिन्दी)") : t("English (English)"),
     "autoplay-videos": autoplayVideos ? t("On") : t("Off"),
-    "sound-effects": soundEffects ? t("On") : t("Off"),
     "profile-photos": ({
       none: t("No one"),
       connections: t("Your connections"),
@@ -1516,12 +1508,6 @@ export default function Settings() {
                 <div className="mt-3">
                   <p className="mb-6 text-sm text-muted-ink">{t("Autoplay videos that appear on CareerLink?")}</p>
                   <SettingSwitch label={t("Autoplay videos in your feed")} checked={autoplayVideos} onChange={toggleAutoplay} />
-                </div>
-              ) : activeDetail === "sound-effects" ? (
-                <div className="mt-3">
-                  <p className="mb-6 text-sm text-muted-ink">{t("Do you want sound effects to play for certain actions while using CareerLink?")}</p>
-                  <SettingSwitch label={t("Play sound effects")} checked={soundEffects} onChange={() => updateSoundEffects(!soundEffects)} />
-                  <p className="mt-4 text-xs leading-5 text-muted-ink">{t("Play a short sound when you send a message or join an event.")}</p>
                 </div>
               ) : activeDetail === "content-language" ? (
                 <div className="mt-4 space-y-5">

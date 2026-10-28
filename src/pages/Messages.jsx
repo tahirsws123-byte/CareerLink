@@ -39,7 +39,6 @@ import {
   updateMessageAction,
 } from "../services/messageServices";
 import { emitUnreadCountsChanged } from "../utils/unreadEvents";
-import { playSoundEffect } from "../utils/playSoundEffect.js";
 
 export default function Messages() {
   const t = useTranslation();
@@ -274,7 +273,6 @@ export default function Messages() {
         const createdMessage = await sendMessage(conversationId, text, null, attachment);
         setMessages((previous) => [...previous, createdMessage]);
       }
-      playSoundEffect();
       setDraft("");
       setAttachment(null);
       await loadConversations({ silent: true });
@@ -428,7 +426,6 @@ export default function Messages() {
       setComposeSending(true);
       const conversation = await createOrGetConversation(composeRecipient._id);
       await sendMessage(conversation._id, composeDraft.trim());
-      playSoundEffect();
       setComposeDraft("");
       setComposeRecipient(null);
       setComposeSearch("");

@@ -10,16 +10,33 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.vite/
+.cache/
+coverage/
+playwright-report/
+test-results/
 *.local
-server/.env
-server/.env.*
-!server/.env.example
+
+# Local environment and credentials; keep safe example templates
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Large OCR language data is not used by the app
+*.traineddata
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
+desktop.ini
 *.suo
 *.ntvs*
 *.njsproj

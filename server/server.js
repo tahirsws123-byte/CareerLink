@@ -8,7 +8,6 @@ dotenv.config({ path: path.join(__dirname, ".env") });
 import express from "express";
 import cors from "cors";
 import connectdb from "./config/db.js";
-import { seedJobsIfEmpty } from "./seedJobs.js";
 import { ensurePostIndexes } from "./utils/postIndexes.js";
 import { ensureUserIndexes } from "./utils/userIndexes.js";
 import { startNetworkCatchupScheduler } from "./utils/networkCatchupScheduler.js";
@@ -32,7 +31,6 @@ const { default: searchRoutes } = await import("./routes/searchRoutes.js");
 await connectdb();
 await ensurePostIndexes();
 await ensureUserIndexes();
-await seedJobsIfEmpty();
 
 app.get("/", (req, res) => {
   res.send("Server is running");

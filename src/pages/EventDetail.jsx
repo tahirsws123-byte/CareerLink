@@ -9,7 +9,6 @@ import useAuth from "../hooks/useAuth.js";
 import api from "../services/api.js";
 import { addEventComment, addEventCommentReply, cancelEvent, deleteEvent, deleteEventComment, getEvent, getEventPostAnalytics, getEvents, reportEventComment, toggleEventCommentLike, toggleEventCommentPin, toggleEventRsvp, updateEvent, updateEventAttendee, updateEventComment, updateEventCommentSettings } from "../services/communityServices.js";
 import { createOrGetConversation, sendMessage } from "../services/messageServices.js";
-import { playSoundEffect } from "../utils/playSoundEffect.js";
 
 export default function EventDetail() {
   const { eventId } = useParams();
@@ -115,7 +114,6 @@ export default function EventDetail() {
       setBusy("rsvp");
       const result = await toggleEventRsvp(eventId);
       setEvent((current) => ({ ...current, isAttending: result.attending, attendeeCount: result.attendeeCount }));
-      if (result.attending) playSoundEffect();
       toast.success(result.attending ? "You’re attending this event" : "You’re no longer attending");
     } catch (error) {
       toast.error(error.response?.data?.message || "Unable to update RSVP");
