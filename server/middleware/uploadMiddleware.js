@@ -3,9 +3,6 @@ import multer from "multer";
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
-  // Message attachments may be images, archives, documents, or media.
-  // Cloudinary stores the original bytes and the UI renders them as downloads
-  // when they are not browser-previewable.
   cb(null, true);
 };
 
