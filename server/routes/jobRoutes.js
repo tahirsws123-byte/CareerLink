@@ -1,0 +1,26 @@
+import express from "express";
+import { Protect } from "../middleware/authMiddleware.js";
+import { applyToJob, createJob, deleteMyJobAlert, getApplicationResumeUrl, getCandidateJob, getEmployerApplications, getManagedJob, getManagedJobCandidates, getMyApplications, getMyJobAlert, getMyPostedJobs, inviteCandidateToJob, listJobs, reportJob, saveJobAlert, setManagedJobStatus, toggleSavedJob, updateApplicationStatus } from "../controllers/jobController.js";
+
+const router = express.Router();
+router.use(Protect);
+router.get("/mine", getMyPostedJobs);
+router.get("/manage/:jobId", getManagedJob);
+router.get("/manage/:jobId/candidates", getManagedJobCandidates);
+router.post("/manage/:jobId/invite/:candidateId", inviteCandidateToJob);
+router.patch("/manage/:jobId/status", setManagedJobStatus);
+router.get("/:jobId/details", getCandidateJob);
+router.get("/", listJobs);
+router.post("/", createJob);
+router.get("/applications/mine", getMyApplications);
+router.get("/applications", getMyApplications);
+router.get("/applications/employer", getEmployerApplications);
+router.get("/applications/:applicationId/resume", getApplicationResumeUrl);
+router.get("/alerts/mine", getMyJobAlert);
+router.put("/alerts/mine", saveJobAlert);
+router.delete("/alerts/mine", deleteMyJobAlert);
+router.post("/:jobId/report", reportJob);
+router.post("/:jobId/save", toggleSavedJob);
+router.post("/:jobId/apply", applyToJob);
+router.patch("/applications/:applicationId/status", updateApplicationStatus);
+export default router;
