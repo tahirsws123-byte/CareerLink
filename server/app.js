@@ -63,7 +63,7 @@ const { default: searchRoutes } = await import("./routes/searchRoutes.js");
 const { default: companyPageRoutes } = await import("./routes/companyPageRoutes.js");
 const { default: moderationRoutes } = await import("./routes/moderationRoutes.js");
 
-app.get("/", (_req, res) => {
+app.get(["/", "/api"], (_req, res) => {
   res.send("Server is running");
 });
 

@@ -37,4 +37,11 @@ npm run build
 
 For a hosted demo, set `VITE_API_BASE_URL` to the backend URL ending in `/api`, and configure the backend MongoDB connection plus its frontend origin/CORS settings. Configure Google OAuth, email, or Cloudinary credentials only if you want to use those integrations. Keep secrets private and use values appropriate for your hosting environment.
 
-The backend exports its Express app for Vercel and still starts a persistent server with `npm start`. To deploy it as a separate Vercel project, set that project's root directory to `server`; deploy the frontend separately and point `VITE_API_BASE_URL` at the backend domain ending in `/api`. Vercel Functions do not keep the hourly notification scheduler running, and their request-size limit is below this app's largest upload limits. Use the included persistent Render service for the full scheduled-notification and large-upload behavior unless those features are adapted for serverless hosting.
+The backend exports its Express app through Vercel Functions and still starts a persistent server with `npm start`. To deploy it as a separate Vercel project:
+
+1. Set the Vercel project's **Root Directory** to `server`.
+2. Set **Framework Preset** to `Other`; leave **Build Command** and **Output Directory** unset. Vercel installs dependencies from `server/package.json` and deploys `server/api/` as functions. Do not use `npm run build` or configure a start command for this backend project.
+3. Add the required backend environment variables in Vercel, including `MONGO_URI`, `JWT_SECRET`, and `CORS_ORIGINS` (or `CLIENT_URL`) with the production frontend origin.
+4. Deploy the frontend separately and set its `VITE_API_BASE_URL` to the backend deployment URL ending in `/api`.
+
+Vercel Functions do not keep the hourly notification scheduler running, and their request-size limit is below this app's largest upload limits. Use the included persistent Render service for the full scheduled-notification and large-upload behavior unless those features are adapted for serverless hosting.
