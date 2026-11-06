@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   Bell,
   BriefcaseBusiness,
+  Building2,
   Check,
   Filter,
   Search,
@@ -34,7 +35,7 @@ export default function Network({ variant = "overview" }) {
     communityCounts: {},
   });
   const [followingUsers, setFollowingUsers] = useState([]);
-  const [jobPosterUsers, setJobPosterUsers] = useState([]);
+  const [followedCompanyPages, setFollowedCompanyPages] = useState([]);
   const [followers, setFollowers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -56,11 +57,11 @@ export default function Network({ variant = "overview" }) {
     if (!silent) setLoading(true);
     setError("");
     try {
-      const [summaryResponse, followingResponse, followersResponse, jobPostersResponse] = await Promise.all([
+      const [summaryResponse, followingResponse, followersResponse, companyPagesResponse] = await Promise.all([
         api.get("/connections/summary"),
         api.get("/users/following"),
         api.get("/users/followers"),
-        api.get("/users/following/job-posters"),
+        api.get("/company-pages/following"),
       ]);
       const data = summaryResponse.data;
       setSummary({
@@ -72,7 +73,7 @@ export default function Network({ variant = "overview" }) {
         communityCounts: data.communityCounts || {},
       });
       setFollowingUsers(followingResponse.data.users || []);
-      setJobPosterUsers(jobPostersResponse.data.users || []);
+      setFollowedCompanyPages(companyPagesResponse.data.companyPages || []);
       setFollowers(followersResponse.data.users || []);
       setFollowedIds(followingResponse.data.following || []);
     } catch (requestError) {
@@ -143,6 +144,19 @@ export default function Network({ variant = "overview" }) {
       toast.success(data.following ? "Following" : "Unfollowed");
     } catch (requestError) {
       toast.error(requestError.response?.data?.message || "Unable to update follow status");
+    }
+  };
+
+  const toggleCompanyPageFollow = async (companyPage) => {
+    try {
+      setActionId(companyPage._id);
+      await api.post(`/company-pages/${companyPage._id}/follow`);
+      await loadSummary({ silent: true });
+      toast.success(`Unfollowed ${companyPage.name}`);
+    } catch (requestError) {
+      toast.error(requestError.response?.data?.message || "Unable to update page follow status");
+    } finally {
+      setActionId("");
     }
   };
 
@@ -340,23 +354,29 @@ export default function Network({ variant = "overview" }) {
       <div className="min-h-screen bg-[#f3f2ef] px-4 py-6">
         <div className="mx-auto max-w-[1000px] space-y-5">
           <Card className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div><h1 className="text-lg font-semibold text-ink">{t("Pages")}</h1><p className="mt-1 text-sm text-muted-ink">{t("Job-poster accounts you follow.")}</p></div>
+            <div><h1 className="text-lg font-semibold text-ink">{t("Pages")}</h1><p className="mt-1 text-sm text-muted-ink">Company Pages you follow.</p></div>
             <Link to="/network" className={`${buttonClass} border border-brand text-brand hover:bg-sky`}>{t("Back to network")}</Link>
           </Card>
-          <NetworkSection title={`${jobPosterUsers.length} ${t("pages")}`} empty={t("You are not following any job-poster accounts yet.")}>
-            {jobPosterUsers.map((person) => (
-              <ConnectionPersonRow
-                key={person._id}
-                user={person}
-                meta={`${Number(person.followerCount || 0).toLocaleString()} followers · Posts jobs`}
-                actions={
-                  <button
-                    type="button"
-                    onClick={() => toggleFollow(person._id)}
-                    className={`${buttonClass} border border-line text-ink hover:bg-gray-50`}
-                  >{t("Following")}</button>
-                }
-              />
+          <NetworkSection title={`${followedCompanyPages.length} ${t("pages")}`} empty="You are not following any Company Pages yet.">
+            {followedCompanyPages.map((companyPage) => (
+              <div key={companyPage._id} className="flex flex-col gap-3 border-t border-gray-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <Link to={`/company/${companyPage.publicUrlSlug}`} className="flex min-w-0 items-center gap-3">
+                  {companyPage.logo?.url
+                    ? <img src={companyPage.logo.url} alt="" className="h-14 w-14 rounded-lg border border-gray-100 object-cover" />
+                    : <span className="grid h-14 w-14 place-items-center rounded-lg bg-sky text-brand"><Building2 size={24} /></span>}
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-ink hover:underline">{companyPage.name}</span>
+                    <span className="block truncate text-sm text-muted-ink">{companyPage.industry}</span>
+                    <span className="mt-1 block text-xs text-muted-ink">{Number(companyPage.followerCount || 0).toLocaleString()} followers</span>
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  disabled={actionId === companyPage._id}
+                  onClick={() => toggleCompanyPageFollow(companyPage)}
+                  className={`${buttonClass} border border-line text-ink hover:bg-gray-50`}
+                >{actionId === companyPage._id ? "Updating…" : "Following"}</button>
+              </div>
             ))}
           </NetworkSection>
         </div>
@@ -371,7 +391,7 @@ export default function Network({ variant = "overview" }) {
     { label: "Groups", count: summary.communityCounts.groups, to: "/groups" },
     { label: "Events", count: summary.communityCounts.events, to: "/events" },
     { label: "Newsletters", count: summary.communityCounts.newsletters, to: "/newsletters" },
-    { label: "Pages", count: jobPosterUsers.length, to: "/network/pages" },
+    { label: "Pages", count: followedCompanyPages.length, to: "/network/pages" },
   ];
 
   return (

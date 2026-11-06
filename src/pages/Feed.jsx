@@ -40,7 +40,6 @@ export default function Feed() {
         prevPosts.map((post) => (post._id === postId ? response.data : post)),
       );
     } catch (error) {
-      console.log("Toggle Like Error:", error);
       toast.error(error.response?.data?.message || "Unable to like post");
     } finally {
       setLikingPostId(null);
@@ -255,7 +254,6 @@ export default function Feed() {
     return <h1>{error}</h1>;
   }
 
-  console.log(posts);
   return (
     <>
       <div className="min-h-screen bg-[#f3f2ef]">

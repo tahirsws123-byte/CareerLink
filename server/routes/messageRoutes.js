@@ -10,7 +10,8 @@ import {
   updateMessageAction,
 } from "../controllers/messageController.js";
 import { Protect } from "../middleware/authMiddleware.js";
-import upload from "../middleware/uploadMiddleware.js";
+import { attachmentUpload } from "../middleware/uploadMiddleware.js";
+import { uploadRateLimit } from "../middleware/rateLimiters.js";
 
 const router = express.Router();
 
@@ -22,7 +23,7 @@ router.post("/conversations", createOrGetConversation);
 router.post("/conversations/:conversationId/star", toggleConversationStar);
 router.post("/conversations/:conversationId/action", updateConversationAction);
 router.get("/conversations/:conversationId/messages", getMessages);
-router.post("/conversations/:conversationId/messages", upload.single("attachment"), sendMessage);
+router.post("/conversations/:conversationId/messages", uploadRateLimit, attachmentUpload.single("attachment"), sendMessage);
 router.post("/conversations/:conversationId/messages/:messageId/action", updateMessageAction);
 
 export default router;

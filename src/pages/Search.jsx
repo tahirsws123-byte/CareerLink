@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { BriefcaseBusiness, FileText, Search as SearchIcon, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, Building2, FileText, Search as SearchIcon, UsersRound } from "lucide-react";
 import Card from "../components/layout/Card";
 import ProfileAvatar from "../components/layout/ProfileAvatar";
 import ConnectionActionButton from "../components/network/ConnectionActionButton";
 import api from "../services/api.js";
 
-const tabs = ["All", "People", "Jobs", "Posts", "Articles", "Groups"];
+const tabs = ["All", "People", "Jobs", "Posts", "Articles", "Groups", "Pages"];
 
 export default function Search() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(urlQuery);
-  const [results, setResults] = useState({ people: [], jobs: [], posts: [], articles: [], groups: [] });
+  const [results, setResults] = useState({ people: [], jobs: [], posts: [], articles: [], groups: [], pages: [] });
   const [activeTab, setActiveTab] = useState("All");
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -28,7 +28,7 @@ export default function Search() {
     const cleanQuery = query.trim();
 
     if (!cleanQuery) {
-      setResults({ people: [], jobs: [], posts: [], articles: [], groups: [] });
+      setResults({ people: [], jobs: [], posts: [], articles: [], groups: [], pages: [] });
       setPage(1);
       setHasMore(false);
       setError("");
@@ -82,7 +82,7 @@ export default function Search() {
           <div className="border-b border-gray-100 px-4 py-4">
             <h1 className="text-lg font-semibold text-ink">Search</h1>
             <p className="mt-1 text-sm text-muted-ink">
-              Search people, jobs, posts, articles, and groups.
+              Search people, jobs, posts, articles, groups, and company pages.
             </p>
 
             <div className="relative mt-4">
@@ -116,7 +116,7 @@ export default function Search() {
 
           {!loading && !error && !query.trim() && (
             <div className="px-4 py-6 text-sm text-muted-ink">
-              Start typing to search CareerLink members.
+              Start typing to search CareerLink.
             </div>
           )}
 
@@ -196,6 +196,12 @@ export default function Search() {
               <div className="divide-y divide-gray-100">{visibleItems(results.groups, activeTab, page).map((group) => <article key={group._id} className="flex gap-3 px-4 py-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky text-brand"><UsersRound size={18} /></span><div className="min-w-0 flex-1"><h2 className="font-semibold text-ink">{group.name}</h2><p className="mt-1 line-clamp-2 text-sm text-muted-ink">{group.description}</p><p className="mt-2 text-xs text-muted-ink">{group.category} · {group.members?.length || 0} members</p></div><Link to="/groups" className="self-center shrink-0 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand hover:bg-sky">Explore</Link></article>)}</div>
             </section>
           )}
+          {!loading && !error && (activeTab === "All" || activeTab === "Pages") && results.pages.length > 0 && (
+            <section>
+              <CategoryHeading title="Pages" count={results.pages.length} />
+              <div className="divide-y divide-gray-100">{visibleItems(results.pages, activeTab, page).map((companyPage) => <article key={companyPage._id} className="flex gap-3 px-4 py-4"><span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-sky text-brand">{companyPage.logo?.url ? <img src={companyPage.logo.url} alt="" className="h-full w-full object-cover" /> : <Building2 size={18} />}</span><div className="min-w-0 flex-1"><h2 className="truncate font-semibold text-ink">{companyPage.name}</h2><p className="mt-1 text-sm text-muted-ink">{companyPage.industry}</p>{companyPage.tagline && <p className="mt-1 line-clamp-2 text-xs text-gray-600">{companyPage.tagline}</p>}</div><Link to={`/company/${companyPage.publicUrlSlug}`} className="self-center shrink-0 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand hover:bg-sky">View</Link></article>)}</div>
+            </section>
+          )}
           {!loading && !error && hasMore && <div className="border-t border-gray-100 p-4 text-center"><button type="button" onClick={loadMore} disabled={loadingMore} className="rounded-full border border-brand px-5 py-2 text-sm font-semibold text-brand hover:bg-sky disabled:opacity-50">{loadingMore ? "Loading more…" : "Load more results"}</button></div>}
         </Card>
       </div>
@@ -204,7 +210,7 @@ export default function Search() {
 }
 
 function hasResults(results, tab) {
-  const keys = tab === "All" ? ["people", "jobs", "posts", "articles", "groups"] : [tab.toLowerCase()];
+  const keys = tab === "All" ? ["people", "jobs", "posts", "articles", "groups", "pages"] : [tab.toLowerCase()];
   return keys.some((key) => results[key]?.length > 0);
 }
 

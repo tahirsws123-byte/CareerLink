@@ -19,6 +19,17 @@ const postSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    companyPage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CompanyPage",
+      default: null,
+      index: true,
+    },
+    job: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Job",
+      default: null,
+    },
     groupPostStatus: {
       type: String,
       enum: ["approved", "pending", "rejected"],

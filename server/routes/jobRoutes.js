@@ -1,10 +1,13 @@
 import express from "express";
 import { Protect } from "../middleware/authMiddleware.js";
-import { applyToJob, createJob, deleteMyJobAlert, getApplicationResumeUrl, getCandidateJob, getEmployerApplications, getManagedJob, getManagedJobCandidates, getMyApplications, getMyJobAlert, getMyPostedJobs, inviteCandidateToJob, listJobs, reportJob, saveJobAlert, setManagedJobStatus, toggleSavedJob, updateApplicationStatus } from "../controllers/jobController.js";
+import { applyToJob, createJob, deleteMyJobAlert, getApplicationResumeUrl, getCandidateJob, getCompanyPageJobs, getPostableCompanyPages, getEmployerApplications, getManagedJob, getManagedJobCandidates, getMyApplications, getMyJobAlert, getMyPostedJobs, inviteCandidateToJob, listJobs, reportJob, saveJobAlert, setManagedJobStatus, toggleSavedJob, updateApplicationStatus, updateManagedJob } from "../controllers/jobController.js";
 
 const router = express.Router();
 router.use(Protect);
 router.get("/mine", getMyPostedJobs);
+router.get("/company-pages/postable", getPostableCompanyPages);
+router.get("/company-page/:companyPageId", getCompanyPageJobs);
+router.put("/manage/:jobId", updateManagedJob);
 router.get("/manage/:jobId", getManagedJob);
 router.get("/manage/:jobId/candidates", getManagedJobCandidates);
 router.post("/manage/:jobId/invite/:candidateId", inviteCandidateToJob);

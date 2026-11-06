@@ -2,7 +2,7 @@ import Notification from "../models/Notification.js";
 import User from "../models/User.js";
 import Job from "../models/Job.js";
 import Newsletter from "../models/Newsletter.js";
-import { sendNotificationEmail } from "./notificationEmail.js";
+import { sendNotificationEmail, shouldSendNotificationEmail } from "./notificationEmail.js";
 
 export const createNotification = async ({
   recipient,
@@ -195,37 +195,39 @@ export const createNotification = async ({
       && preferences?.networkWeeklySummaryEmail !== false
       && preferences?.emailNotifications !== false
       && Boolean(recipientUser?.email);
-    const emailEnabled = Boolean(
-      emailPreferenceKeyByType[type]
-      && recipientUser?.email
-      && preferences?.emailNotifications !== false
-      && preferences?.[emailPreferenceKeyByType[type]] !== false
-      && (!eventTypes.includes(type) || preferences?.eventNotificationsEnabled !== false)
-      && (type !== "profile_recommendation" || preferences?.profileUpdatesEnabled !== false)
-      && (type !== "profile_recommendation" || preferences?.profileRecommendationsEmail !== false)
-      && (!(type === "job_recommendation" || type === "search_appearance") || preferences?.jobSearchNotificationsEnabled !== false)
-      && (!(type === "connection_recommendation" || type === "follow_recommendation") || preferences?.connectionNotifications !== false)
-      && (!(type === "suggested_post" || type === "trending_conversation" || type === "post_reminder") || preferences?.postingNotificationsEnabled !== false)
-      && (!(type === "unread_message_reminder" || type === "inmail_message" || type === "inmail_reminder") || preferences?.messageNotifications !== false)
-      && (type !== "group_recommendation" || preferences?.groupNotificationsEnabled !== false)
-      && (!(type === "birthday") || preferences?.networkCatchupEnabled !== false)
-      && (!(type === "event_recommendation") || preferences?.eventNotificationsEnabled !== false)
-      && (type !== "message" || preferences?.messageNotifications !== false)
-      && (!(type === "group_post" || type === "group_invitation")
-        || preferences?.groupNotificationsEnabled !== false)
-      && (type !== "group_invitation"
-        || preferences?.groupInvitationsEmailFrequency === "individual")
-      && (type !== "message"
-        || preferences?.messageEmailFrequency === "individual")
-      && (!postingNotification || preferences?.postingNotificationsEnabled !== false)
-      && (!(type === "post_like" || type === "post_comment")
-        || preferences?.networkUpdatesEmail !== false)
-      && (type !== "followed_post" || preferences?.followedPeopleUpdatesEmail !== false)
-      && (!isNewsletterNotification || preferences?.postNewslettersEmail !== false)
-      && (!(type === "post_like" || type === "post_comment" || type === "mention")
-        || postActivityFrequency === "individual")
-      && (!hiringType || preferences?.hiringNotificationsEnabled !== false),
-    );
+    const emailEnabled = shouldSendNotificationEmail({
+      recipient: recipientUser?.email,
+      enabled: Boolean(
+        emailPreferenceKeyByType[type]
+        && preferences?.emailNotifications !== false
+        && preferences?.[emailPreferenceKeyByType[type]] !== false
+        && (!eventTypes.includes(type) || preferences?.eventNotificationsEnabled !== false)
+        && (type !== "profile_recommendation" || preferences?.profileUpdatesEnabled !== false)
+        && (type !== "profile_recommendation" || preferences?.profileRecommendationsEmail !== false)
+        && (!(type === "job_recommendation" || type === "search_appearance") || preferences?.jobSearchNotificationsEnabled !== false)
+        && (!(type === "connection_recommendation" || type === "follow_recommendation") || preferences?.connectionNotifications !== false)
+        && (!(type === "suggested_post" || type === "trending_conversation" || type === "post_reminder") || preferences?.postingNotificationsEnabled !== false)
+        && (!(type === "unread_message_reminder" || type === "inmail_message" || type === "inmail_reminder") || preferences?.messageNotifications !== false)
+        && (type !== "group_recommendation" || preferences?.groupNotificationsEnabled !== false)
+        && (!(type === "birthday") || preferences?.networkCatchupEnabled !== false)
+        && (!(type === "event_recommendation") || preferences?.eventNotificationsEnabled !== false)
+        && (type !== "message" || preferences?.messageNotifications !== false)
+        && (!(type === "group_post" || type === "group_invitation")
+          || preferences?.groupNotificationsEnabled !== false)
+        && (type !== "group_invitation"
+          || preferences?.groupInvitationsEmailFrequency === "individual")
+        && (type !== "message"
+          || preferences?.messageEmailFrequency === "individual")
+        && (!postingNotification || preferences?.postingNotificationsEnabled !== false)
+        && (!(type === "post_like" || type === "post_comment")
+          || preferences?.networkUpdatesEmail !== false)
+        && (type !== "followed_post" || preferences?.followedPeopleUpdatesEmail !== false)
+        && (!isNewsletterNotification || preferences?.postNewslettersEmail !== false)
+        && (!(type === "post_like" || type === "post_comment" || type === "mention")
+          || postActivityFrequency === "individual")
+        && (!hiringType || preferences?.hiringNotificationsEnabled !== false),
+      ),
+    });
     if (
       !recipientUser ||
       (networkCatchupTypes.includes(type) && preferences?.networkCatchupEnabled === false) ||
@@ -278,7 +280,7 @@ export const createNotification = async ({
           },
         },
         {
-          new: true,
+          returnDocument: "after",
           upsert: true,
           setDefaultsOnInsert: true,
         },

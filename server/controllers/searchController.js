@@ -1,4 +1,5 @@
 import Article from "../models/Article.js";
+import CompanyPage from "../models/CompanyPage.js";
 import Connection from "../models/Connection.js";
 import Group from "../models/Group.js";
 import Job from "../models/Job.js";
@@ -33,8 +34,9 @@ export const searchAll = async (req, res) => {
     const readableGroups = await Group.find({
       $or: [{ privacy: "public" }, { members: req.user._id }],
     }).select("_id").lean();
+    const activeCompanyPageIds = await CompanyPage.distinct("_id", { active: { $ne: false } });
 
-    const [people, jobs, posts, articles, groups] = await Promise.all([
+    const [people, jobs, posts, articles, groups, pages] = await Promise.all([
       User.find({
         _id: { $ne: req.user._id },
         accountStatus: { $ne: "deactivated" },
@@ -54,6 +56,7 @@ export const searchAll = async (req, res) => {
       Job.find({
         $and: [
           { $or: [{ status: "open" }, { status: { $exists: false } }] },
+          { $or: [{ companyPage: null }, { companyPage: { $exists: false } }, { companyPage: { $in: activeCompanyPageIds } }] },
           { $or: [{ title: term }, { company: term }, { location: term }, { description: term }, { tags: term }] },
         ],
       })
@@ -62,6 +65,9 @@ export const searchAll = async (req, res) => {
         { $match: {
           text: term,
           groupPostStatus: { $nin: ["pending", "rejected"] },
+          $and: [
+            { $or: [{ companyPage: null }, { companyPage: { $in: activeCompanyPageIds } }] },
+          ],
           $or: [
             { group: null },
             { group: { $in: readableGroups.map((group) => group._id) } },
@@ -125,10 +131,19 @@ export const searchAll = async (req, res) => {
         .populate("author", "name profilePicture publicProfileSlug").sort({ createdAt: -1 }).skip(skip).limit(limit + 1).lean(),
       Group.find({ privacy: "public", $or: [{ name: term }, { description: term }, { category: term }] })
         .select("name description category members createdAt").sort({ createdAt: -1 }).skip(skip).limit(limit + 1).lean(),
+      CompanyPage.find({ active: { $ne: false }, $or: [{ name: term }, { industry: term }, { tagline: term }] })
+        .select("name publicUrlSlug logo industry tagline")
+        .sort({ createdAt: -1 }).skip(skip).limit(limit + 1).lean(),
     ]);
-    const pageHasMore = [people, jobs, posts, articles, groups].some((items) => items.length > limit);
-    const results = { people, jobs, posts, articles, groups };
+    const pageHasMore = [people, jobs, posts, articles, groups, pages].some((items) => items.length > limit);
+    const results = { people, jobs, posts, articles, groups, pages };
     for (const key of Object.keys(results)) results[key] = results[key].slice(0, limit);
+    if (results.pages.length) {
+      await CompanyPage.updateMany(
+        { _id: { $in: results.pages.map((companyPage) => companyPage._id) } },
+        { $inc: { searchAppearances: 1 } },
+      );
+    }
     if (results.people.length) {
       await User.updateMany({ _id: { $in: results.people.map((person) => person._id) } }, { $inc: { searchAppearances: 1 } });
       await recordProfileAnalytics(results.people.map((person) => person._id), "searchAppearances");

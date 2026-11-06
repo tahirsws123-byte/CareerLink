@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+let connectionPromise;
+
 const connectdb = async () => {
     if (!process.env.MONGO_URI?.trim()) {
         throw new Error(
@@ -7,17 +9,25 @@ const connectdb = async () => {
         );
     }
 
-    try{
-        const conn = await mongoose.connect(process.env.MONGO_URI);
-
-        console.log(`MongoDB conncted ${conn.connection.name}`)
-    } catch (error){
-        console.error("MongoDB connection failed");
-
-        console.error(error.message);
-
-        throw error;
+    if (mongoose.connection.readyState === 1) {
+        return mongoose.connection;
     }
+
+    if (mongoose.connection.readyState !== 2 || !connectionPromise) {
+        connectionPromise = mongoose.connect(process.env.MONGO_URI)
+            .then(({ connection }) => {
+                console.log(`MongoDB connected ${connection.name}`);
+                return connection;
+            })
+            .catch((error) => {
+                connectionPromise = undefined;
+                console.error("MongoDB connection failed");
+                console.error(error.message);
+                throw error;
+            });
+    }
+
+    return connectionPromise;
 }
 
 export default connectdb

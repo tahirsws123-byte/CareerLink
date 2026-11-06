@@ -24,38 +24,9 @@ import useAuth from "../../hooks/useAuth";
 import api from "../../services/api.js";
 import { createOrGetConversation, sendMessage } from "../../services/messageServices";
 import { searchUsers } from "../../services/searchServices";
-import Avatar from "../layout/Avatar";
 import ProfileAvatar from "../layout/ProfileAvatar.jsx";
 import PostText from "./PostText.jsx";
 import useTranslation from "../../hooks/useTranslation";
-
-const getInitials = (name) => {
-  if (!name) return "U";
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((word) => word[0])
-    .join("")
-    .toUpperCase();
-};
-
-const getAvatarColor = (name) => {
-  const colors = [
-    "#FF6B6B",
-    "#4ECDC4",
-    "#45B7D1",
-    "#FFA07A",
-    "#98D8C8",
-    "#F7DC6F",
-    "#BB8FCE",
-    "#85C1E2",
-  ];
-  if (!name) return colors[0];
-  const hash = name
-    .split("")
-    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return colors[hash % colors.length];
-};
 
 export default function PostCard({
   post,
@@ -76,7 +47,9 @@ export default function PostCard({
   groupIsOwner = false,
   onRecommendPost,
   onToggleComments,
+  onRequireAuth,
   highlighted = false,
+  pageAdminFeed = false,
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const [savedState, setSavedState] = useState(saved);
@@ -101,7 +74,7 @@ export default function PostCard({
   const [sendingPost, setSendingPost] = useState(false);
   const menuRef = useRef(null);
   const reactionPickerRef = useRef(null);
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const t = useTranslation();
   const isOwner = user?._id === post.author?._id;
   const originalPost = post.repostOf || post;
@@ -118,6 +91,12 @@ export default function PostCard({
   ));
   const [pollClosed, setPollClosed] = useState(false);
   const [pollSubmitting, setPollSubmitting] = useState(false);
+  const requireAuthentication = () => {
+    if (isAuthenticated) return true;
+    if (!onRequireAuth) return true;
+    onRequireAuth();
+    return false;
+  };
 
   useEffect(() => {
     setPollState(post.repostOf?.poll || post.poll || null);
@@ -141,6 +120,7 @@ export default function PostCard({
 
   const submitPollVote = async (optionId) => {
     if (pollSubmitting || pollClosed || pollHasVoted) return;
+    if (!requireAuthentication()) return;
     try {
       setPollSubmitting(true);
       const { data } = await api.post(`/posts/${pollPost._id}/poll/vote`, { optionId });
@@ -165,6 +145,7 @@ export default function PostCard({
 
   const submitPostReport = async (event) => {
     event.preventDefault();
+    if (!requireAuthentication()) return;
     try {
       setReporting(true);
       await api.post(`/posts/${post._id}/report`, { reason: reportReason, details: reportDetails });
@@ -184,8 +165,7 @@ export default function PostCard({
       const response = await api.get(`/comments/${post._id}`);
       setComments(response.data);
       setCommentCount(response.data.length);
-    } catch (error) {
-      console.log(error);
+    } catch {
       toast.error("Unable to load comments");
     } finally {
       setLoadingComments(false);
@@ -193,6 +173,7 @@ export default function PostCard({
   };
 
   const handleEditPost = async () => {
+    if (!requireAuthentication()) return;
     if (!editText.trim() && !editImage && !post.image?.url && !post.video?.url) {
       toast.error("Post text or image is required");
       return;
@@ -232,6 +213,7 @@ export default function PostCard({
 
   const handleDeleteComment = async (commentId) => {
     if (deletingCommentId) return;
+    if (!requireAuthentication()) return;
 
     const commentToDelete = comments.find(
       (comment) => comment._id === commentId,
@@ -300,6 +282,7 @@ export default function PostCard({
 
   const handleCreateComment = async () => {
     if (post.commentsDisabled || !commentText.trim() || isCreatingComment) return;
+    if (!requireAuthentication()) return;
 
     setIsCreatingComment(true);
 
@@ -322,6 +305,7 @@ export default function PostCard({
 
   const handleSendPost = async () => {
     if (selectedSendUsers.length === 0 || sendingPost) return;
+    if (!requireAuthentication()) return;
 
     try {
       setSendingPost(true);
@@ -416,10 +400,17 @@ export default function PostCard({
   }, []);
 
   const getPostLink = () => {
+    if (pageAdminFeed && post.companyPage?.publicUrlSlug) {
+      return `${window.location.origin}/company/${post.companyPage.publicUrlSlug}#post-${post._id}`;
+    }
     const url = new URL(window.location.href);
     url.hash = `post-${post._id}`;
     return url.toString();
   };
+  const postAuthorName = post.companyPage?.name || post.author?.name || "Unknown";
+  const postAuthorUrl = post.companyPage
+    ? `/company/${post.companyPage.publicUrlSlug}`
+    : `/profile/${post.author?._id}`;
 
   const copyPostLink = async () => {
     const link = getPostLink();
@@ -451,6 +442,7 @@ export default function PostCard({
   };
 
   const openSendModal = () => {
+    if (!requireAuthentication()) return;
     setSelectedSendUsers([]);
     setSendNote("");
     setSendQuery("");
@@ -463,40 +455,32 @@ export default function PostCard({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            to={`/profile/${post.author?._id}`}
+            to={postAuthorUrl}
             className="inline-flex h-10 w-10 flex-shrink-0 overflow-hidden rounded-full"
           >
-            {post.author?.profilePicture ? (
-              <img
-                src={post.author.profilePicture}
-                alt={post.author?.name || "Profile"}
-                className="h-full w-full object-cover"
-              />
+            {post.companyPage?.logo?.url ? (
+              <img src={post.companyPage.logo.url} alt="" className="h-full w-full object-cover" />
             ) : (
-              <Avatar
-                initials={getInitials(post.author?.name)}
-                color={getAvatarColor(post.author?.name)}
-                size={40}
-              />
+              <ProfileAvatar user={post.author} size={40} />
             )}
           </Link>
 
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <Link
-                to={`/profile/${post.author?._id}`}
+                to={postAuthorUrl}
                 className="block max-w-[200px] truncate font-semibold text-black hover:underline"
               >
-                {post.author?.name || "Unknown"}
+                {postAuthorName}
               </Link>
 
             </div>
 
-            <p className="text-sm text-gray-500 truncate">Software Engineer</p>
+            <p className="text-sm text-gray-500 truncate">{post.companyPage ? "Company Page" : post.author?.headline || "CareerLink member"}</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {user?._id && post.author?._id && user._id !== post.author._id && (
+          {!post.companyPage && user?._id && post.author?._id && user._id !== post.author._id && (
             <button
               type="button"
               onClick={() => onToggleFollow?.(post.author._id)}
@@ -522,7 +506,12 @@ export default function PostCard({
           </button>
           {showMenu && (
             <div className={`absolute right-0 mt-2 w-60 rounded-lg border border-gray-200 bg-white py-1 shadow-xl z-30 ${groupPost ? "max-h-[min(70vh,420px)] overflow-y-auto" : ""}`}>
-              {groupPost ? (
+              {pageAdminFeed ? (
+                <>
+                  <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-gray-50" onClick={() => { setShowMenu(false); copyPostLink(); }}><LinkIcon size={17} />Copy link to post</button>
+                  <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-700 hover:bg-red-50" onClick={() => { setShowMenu(false); setReportReason("spam"); setReportDetails(""); setShowReportModal(true); }}><Flag size={17} />Report post</button>
+                </>
+              ) : groupPost ? (
                 <>
                   <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-gray-50" onClick={handleSavePost}><Bookmark size={17} />{savedState ? "Remove from saved" : "Save"}</button>
                   <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm hover:bg-gray-50" onClick={() => { setShowMenu(false); copyPostLink(); }}><LinkIcon size={17} />Copy link to post</button>
@@ -538,9 +527,9 @@ export default function PostCard({
                       <button className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100" onClick={() => openEditPost("Edit Post")}>{t("Edit")}</button>
                           <button className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100" onClick={openPostDeleteModal}>{t("Delete")}</button>
                     </>
-                  ) : (
+                  ) : !post.companyPage ? (
                     <button type="button" className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100" onClick={() => { setShowMenu(false); onToggleFollow?.(post.author._id); }} disabled={followLoading}>{t(isFollowing ? "Unfollow" : "Follow")}</button>
-                  )}
+                  ) : null}
                   <button className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100" onClick={handleSavePost}>{t(savedState ? "Remove from saved" : "Save post")}</button>
                   <button type="button" className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100" onClick={() => { setShowMenu(false); openSendModal(); }}>{t("Send in a message")}</button>
                   <button type="button" className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100" onClick={() => { setShowMenu(false); copyPostLink(); }}>{t("Copy link")}</button>
@@ -551,7 +540,7 @@ export default function PostCard({
             </div>
           )}
         </div>
-        <button
+        {!pageAdminFeed && <button
           type="button"
           onClick={() => onDismiss?.(post._id, "dismiss")}
           className="rounded-full p-2 text-gray-500 hover:bg-gray-100"
@@ -559,7 +548,7 @@ export default function PostCard({
           title="Hide post"
         >
           <X size={19} />
-        </button>
+        </button>}
         </div>
       </div>
 
@@ -579,6 +568,12 @@ export default function PostCard({
         {originalPost.text && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed"><PostText text={originalPost.text} /></p>}
 
         {originalPost.event && <EventPostAttachment event={originalPost.event} />}
+        {originalPost.job?._id && (
+          <Link to={`/jobs/view/${originalPost.job._id}`} className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-3 transition hover:border-brand hover:bg-sky/30">
+            <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{originalPost.job.title}</span><span className="mt-1 block truncate text-xs text-muted-ink">{originalPost.job.company}{originalPost.job.location ? ` · ${originalPost.job.location}` : ""}{originalPost.job.salary ? ` · ${originalPost.job.salary}` : ""}</span></span>
+            <span className="shrink-0 rounded-full border border-brand px-3 py-1.5 text-xs font-semibold text-brand">View job</span>
+          </Link>
+        )}
 
         {pollState?.question && (
           <section className="mt-4 rounded-xl border border-gray-200 p-4" aria-label="Post poll">
@@ -717,7 +712,7 @@ export default function PostCard({
         <button
           className="order-4 flex items-center gap-2 rounded px-3 py-2 disabled:opacity-60"
           onClick={() => onRepost?.(post._id)}
-          disabled={reposting || post.author?._id === user?._id}
+          disabled={reposting || (post.author?._id === user?._id && !post.companyPage?.isOwner)}
         >
           <Repeat2 size={16} />
           <span className="hidden sm:inline">{t(reposting ? "Reposting..." : "Repost")}</span>
@@ -742,21 +737,7 @@ export default function PostCard({
                     className="flex items-start justify-between gap-3"
                   >
                     <div className="flex gap-3 flex-1">
-                      {comment.author?.profilePicture ? (
-                        <img
-                          src={comment.author.profilePicture}
-                          alt=""
-                          className="h-9 w-9 rounded-full"
-                        />
-                      ) : (
-                        <div className="h-9 w-9 rounded-full">
-                          <Avatar
-                            initials={getInitials(comment.author?.name)}
-                            color={getAvatarColor(comment.author?.name)}
-                            size={36}
-                          />
-                        </div>
-                      )}
+                      <ProfileAvatar user={comment.author} size={36} />
 
                       <div className="flex-1 rounded-lg bg-gray-100 px-3 py-2">
                         <h4 className="text-sm font-semibold">
@@ -801,21 +782,7 @@ export default function PostCard({
               })
             )}
             {!post.commentsDisabled && <div className="mt-4 flex items-start gap-3 border-t pt-4">
-              {user?.profilePicture ? (
-                <img
-                  src={user.profilePicture}
-                  alt=""
-                  className="h-10 w-10 rounded-full"
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full">
-                  <Avatar
-                    initials={getInitials(user?.name)}
-                    color={getAvatarColor(user?.name)}
-                    size={40}
-                  />
-                </div>
-              )}
+              <ProfileAvatar user={user} size={40} />
 
               <div className="flex-1">
                 <textarea

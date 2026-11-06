@@ -9,10 +9,17 @@ import {
 } from "lucide-react";
 import useTranslation from "../../hooks/useTranslation";
 
-export default function BusinessDropdown({ onNavigate = () => {} }) {
+export default function BusinessDropdown({ mobile = false, onNavigate = () => {} }) {
   const t = useTranslation();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    if (open && mobile) {
+      panelRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [open, mobile]);
 
   useEffect(() => {
     const handlePointerDown = (event) => {
@@ -59,24 +66,17 @@ export default function BusinessDropdown({ onNavigate = () => {} }) {
 
       {open && (
         <div
+          ref={panelRef}
           role="dialog"
           aria-label={t("Business services")}
-          className="absolute left-0 top-[calc(100%+4px)] z-50 w-[min(92vw,690px)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl xl:left-auto xl:right-0 xl:top-[calc(100%+12px)]"
+          className={
+            mobile
+              ? "relative z-50 mt-2 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl"
+              : "absolute left-0 top-[calc(100%+4px)] z-50 w-[min(92vw,480px)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl xl:left-auto xl:right-0 xl:top-[calc(100%+12px)]"
+          }
         >
-          <div className="grid sm:grid-cols-2">
+          <div>
             <section className="px-5 py-5 sm:px-7 sm:py-8">
-              <h2 className="mb-4 text-lg font-medium text-ink">
-                {t("My Apps")}
-              </h2>
-              <Link to="/jobs/manage" onClick={closeMenu} className={businessItemClass}>
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sky text-brand">
-                  <BriefcaseBusiness size={21} />
-                </span>
-                <span className="text-sm font-medium text-ink">{t("Post a job")}</span>
-              </Link>
-            </section>
-
-            <section className="border-t border-gray-200 px-5 py-5 sm:border-l sm:border-t-0 sm:px-7 sm:py-8">
               <h2 className="mb-4 text-lg font-medium text-ink">
                 {t("Explore more for business")}
               </h2>
@@ -90,7 +90,7 @@ export default function BusinessDropdown({ onNavigate = () => {} }) {
                     <span className="mt-0.5 block text-xs text-muted-ink">{t("Get qualified applicants quickly")}</span>
                   </span>
                 </Link>
-                <Link to="/network/pages" onClick={closeMenu} className={businessItemClass}>
+                <Link to="/company-pages/create" onClick={closeMenu} className={businessItemClass}>
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sky text-brand">
                     <Building2 size={21} />
                   </span>

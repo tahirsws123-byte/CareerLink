@@ -9,15 +9,36 @@ import cloudinary from "../config/cloudinary.js";
 import JobReport from "../models/JobReport.js";
 import { createNotification } from "../utils/notificationUtils.js";
 import Notification from "../models/Notification.js";
+import CompanyPage from "../models/CompanyPage.js";
+import Post from "../models/Post.js";
 
 const isId = (value) => mongoose.isValidObjectId(value);
+const managedJobAccess = async (userId) => ({
+  $or: [
+    { postedBy: userId },
+    { companyPage: { $in: await CompanyPage.distinct("_id", { owner: userId }) } },
+  ],
+});
+const shareCompanyPageJob = async (job, companyPage) => {
+  if (!companyPage?.shareNewJobs || await Post.exists({ job: job._id })) return;
+  await Post.create({
+    author: job.postedBy,
+    companyPage: companyPage._id,
+    job: job._id,
+    text: `We're hiring: ${job.title} in ${job.location}. Apply today.`,
+  });
+};
 const listParam = (value) => (typeof value === "string" ? value.split(",").map((item) => item.trim()).filter(Boolean) : []);
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const listJobs = async (req, res) => {
   try {
     const { q = "", type, location, datePosted } = req.query;
-    const filter = { $and: [{ $or: [{ status: "open" }, { status: { $exists: false } }] }] };
+    const activeCompanyPages = await CompanyPage.distinct("_id", { active: { $ne: false } });
+    const filter = { $and: [
+      { $or: [{ status: "open" }, { status: { $exists: false } }] },
+      { $or: [{ companyPage: null }, { companyPage: { $exists: false } }, { companyPage: { $in: activeCompanyPages } }] },
+    ] };
     if (req.query.jobId) {
       if (!isId(req.query.jobId)) return res.status(400).json({ message: "Invalid job ID" });
       filter._id = req.query.jobId;
@@ -105,7 +126,7 @@ export const listJobs = async (req, res) => {
 
 export const getMyPostedJobs = async (req, res) => {
   try {
-    const jobs = await Job.find({ postedBy: req.user._id }).sort({ createdAt: -1 }).lean();
+    const jobs = await Job.find({ postedBy: req.user._id, companyPage: null }).sort({ createdAt: -1 }).lean();
     const applications = await JobApplication.aggregate([
       { $match: { job: { $in: jobs.map((job) => job._id) } } },
       { $group: { _id: "$job", count: { $sum: 1 } } },
@@ -118,9 +139,104 @@ export const getMyPostedJobs = async (req, res) => {
   }
 };
 
+export const getCompanyPageJobs = async (req, res) => {
+  if (!isId(req.params.companyPageId)) return res.status(400).json({ message: "Invalid company page ID" });
+  try {
+    const companyPage = await CompanyPage.exists({ _id: req.params.companyPageId, owner: req.user._id });
+    if (!companyPage) return res.status(404).json({ message: "Company page not found" });
+    const jobs = await Job.find({ companyPage: req.params.companyPageId })
+      .sort({ createdAt: -1 })
+      .lean();
+    const applications = await JobApplication.aggregate([
+      { $match: { job: { $in: jobs.map((job) => job._id) } } },
+      { $group: { _id: "$job", count: { $sum: 1 } } },
+    ]);
+    const counts = new Map(applications.map((item) => [item._id.toString(), item.count]));
+    return res.json({
+      jobs: jobs.map((job) => ({ ...job, applicantCount: counts.get(job._id.toString()) || 0 })),
+    });
+  } catch (error) {
+    console.error("Get company page jobs error:", error);
+    return res.status(500).json({ message: "Unable to load Company Page jobs" });
+  }
+};
+
+export const getPostableCompanyPages = async (req, res) => {
+  try {
+    const emailDomains = [
+      ...(req.user.emailVerified ? [req.user.email] : []),
+      ...(req.user.securityEmails || []).filter((entry) => entry.verified).map((entry) => entry.email),
+    ].map((email) => email.split("@").pop()?.toLowerCase()).filter(Boolean);
+    const companyPages = await CompanyPage.find({
+      active: { $ne: false },
+      $or: [
+        { owner: req.user._id },
+        ...(emailDomains.length ? [{
+          basicJobPostingEnabled: true,
+          jobPostingDomains: { $in: emailDomains },
+        }] : []),
+      ],
+    }).select("_id name publicUrlSlug logo owner").sort({ name: 1 }).lean();
+    return res.json({ companyPages });
+  } catch (error) {
+    console.error("Get postable Company Pages error:", error);
+    return res.status(500).json({ message: "Unable to load Company Pages available for job posting" });
+  }
+};
+
+export const updateManagedJob = async (req, res) => {
+  if (!isId(req.params.jobId)) return res.status(400).json({ message: "Invalid job ID" });
+  const { title = "", company = "", location = "", type = "", level = "", workMode = "", salary = "", description = "", tags = [], industry = "", jobFunction = "", status } = req.body;
+  if (!["open", "draft", "in-review", "paused", "closed"].includes(status)) return res.status(400).json({ message: "Invalid job status" });
+  const fields = [["title", title, 160], ["company", company, 160], ["location", location, 160], ["employment type", type, 60], ["experience level", level, 60], ["workplace type", workMode, 30], ["job description", description, 3000]];
+  for (const [label, value, maxLength] of fields) {
+    if (typeof value !== "string" || (status !== "draft" && !value.trim()) || value.trim().length > maxLength) {
+      return res.status(400).json({ message: `${label} ${status === "draft" ? "must be text and " : "is required and "}must be ${maxLength} characters or fewer` });
+    }
+  }
+  if ((type && !["Full-time", "Part-time", "Contract", "Temporary", "Internship"].includes(type.trim()))
+    || (level && !["Internship", "Entry level", "Associate", "Mid-Senior", "Director", "Executive"].includes(level.trim()))
+    || (workMode && !["On-site", "Hybrid", "Remote"].includes(workMode.trim()))) {
+    return res.status(400).json({ message: "Choose valid job options" });
+  }
+  if (typeof salary !== "string" || salary.trim().length > 100
+    || typeof industry !== "string" || industry.trim().length > 100
+    || typeof jobFunction !== "string" || jobFunction.trim().length > 100
+    || !Array.isArray(tags) || tags.length > 30 || tags.some((tag) => typeof tag !== "string" || tag.trim().length > 60)) {
+    return res.status(400).json({ message: "One or more optional job fields are invalid" });
+  }
+  if (!["open", "draft", "in-review", "paused", "closed"].includes(status)) return res.status(400).json({ message: "Invalid job status" });
+  try {
+    const existingJob = await Job.findOne({
+      _id: req.params.jobId,
+      ...(await managedJobAccess(req.user._id)),
+      companyPage: { $ne: null },
+    }).select("companyPage postedBy");
+    const ownsPage = existingJob && await CompanyPage.exists({ _id: existingJob.companyPage, owner: req.user._id });
+    if (!existingJob || (!ownsPage && existingJob.postedBy.toString() !== req.user._id.toString())) {
+      return res.status(404).json({ message: "Company Page job not found" });
+    }
+    const job = await Job.findOneAndUpdate(
+      { _id: req.params.jobId, ...(await managedJobAccess(req.user._id)), companyPage: { $ne: null } },
+      { $set: {
+        title: title.trim(), company: company.trim(), location: location.trim(), type: type.trim(),
+        level: level.trim(), workMode: workMode.trim(), salary: salary.trim(),
+        description: description.trim(), tags: tags.map((tag) => tag.trim()).filter(Boolean),
+        industry: industry.trim(), jobFunction: jobFunction.trim(), status,
+      } },
+      { returnDocument: "after", runValidators: true },
+    );
+    if (!job) return res.status(404).json({ message: "Company Page job not found" });
+    return res.json({ job });
+  } catch (error) {
+    console.error("Update company page job error:", error);
+    return res.status(500).json({ message: "Unable to update this job" });
+  }
+};
+
 export const getManagedJob = async (req, res) => {
   if (!isId(req.params.jobId)) return res.status(400).json({ message: "Invalid job ID" });
-  const job = await Job.findOne({ _id: req.params.jobId, postedBy: req.user._id }).populate("postedBy", "name headline profilePicture");
+  const job = await Job.findOne({ _id: req.params.jobId, ...(await managedJobAccess(req.user._id)) }).populate("postedBy", "name headline profilePicture");
   if (!job) return res.status(404).json({ message: "Job not found in your account" });
   const applicantCount = await JobApplication.countDocuments({ job: job._id });
   return res.json({ job, views: job.views || 0, applicantCount });
@@ -128,7 +244,7 @@ export const getManagedJob = async (req, res) => {
 
 export const getManagedJobCandidates = async (req, res) => {
   if (!isId(req.params.jobId)) return res.status(400).json({ message: "Invalid job ID" });
-  const job = await Job.findOne({ _id: req.params.jobId, postedBy: req.user._id }).lean();
+  const job = await Job.findOne({ _id: req.params.jobId, ...(await managedJobAccess(req.user._id)) }).lean();
   if (!job) return res.status(404).json({ message: "Job not found in your account" });
   const appliedIds = await JobApplication.find({ job: job._id }).distinct("applicant");
   const invitedIds = await Notification.find({ job: job._id, sender: req.user._id, type: NOTIFICATION_TYPES.JOB_INVITE }).distinct("recipient");
@@ -169,7 +285,7 @@ export const getManagedJobCandidates = async (req, res) => {
 export const inviteCandidateToJob = async (req, res) => {
   if (!isId(req.params.jobId) || !isId(req.params.candidateId)) return res.status(400).json({ message: "Invalid job or candidate ID" });
   const [job, candidate] = await Promise.all([
-    Job.findOne({ _id: req.params.jobId, postedBy: req.user._id, status: { $ne: "closed" } }),
+    Job.findOne({ _id: req.params.jobId, ...(await managedJobAccess(req.user._id)), status: "open" }),
     User.findOne({ _id: req.params.candidateId, accountStatus: "active", profileVisibility: "public", "dataPrivacyPreferences.allowRecruiterJobInvites": { $ne: false }, "openToWork.enabled": true, "openToWork.visibility": { $ne: "only-me" } }).select("_id"),
   ]);
   if (!job) return res.status(404).json({ message: "Open job not found in your account" });
@@ -193,16 +309,33 @@ export const inviteCandidateToJob = async (req, res) => {
 
 export const setManagedJobStatus = async (req, res) => {
   if (!isId(req.params.jobId)) return res.status(400).json({ message: "Invalid job ID" });
-  if (!["open", "closed"].includes(req.body.status)) return res.status(400).json({ message: "Invalid job status" });
-  const existingJob = await Job.findOne({ _id: req.params.jobId, postedBy: req.user._id }).select("status");
+  if (!["open", "draft", "in-review", "paused", "closed"].includes(req.body.status)) return res.status(400).json({ message: "Invalid job status" });
+  const existingJob = await Job.findOne({ _id: req.params.jobId, ...(await managedJobAccess(req.user._id)) })
+    .select("status companyPage postedBy title company location type level workMode description");
   if (!existingJob) return res.status(404).json({ message: "Job not found in your account" });
+  if (existingJob.companyPage && existingJob.postedBy.toString() !== req.user._id.toString()
+    && !(await CompanyPage.exists({ _id: existingJob.companyPage, owner: req.user._id }))) {
+    return res.status(404).json({ message: "Company Page job not found" });
+  }
+  if (existingJob.companyPage && req.body.status !== "draft"
+    && ["title", "company", "location", "type", "level", "workMode", "description"].some((field) => !existingJob[field]?.trim())) {
+    return res.status(400).json({ message: "Complete all required job details before changing this draft status" });
+  }
+  if (!existingJob.companyPage && !["open", "closed"].includes(req.body.status)) {
+    return res.status(400).json({ message: "Personal job posts can only be opened or closed" });
+  }
   const job = await Job.findOneAndUpdate(
-    { _id: req.params.jobId, postedBy: req.user._id },
+    { _id: req.params.jobId, ...(await managedJobAccess(req.user._id)) },
     { $set: { status: req.body.status } },
-    { new: true, runValidators: true },
+    { returnDocument: "after", runValidators: true },
   );
   if (!job) return res.status(404).json({ message: "Job not found in your account" });
-  if (req.body.status === "closed" && existingJob.status !== "closed" && job.savedBy?.length) {
+  if (req.body.status === "open" && existingJob.status !== "open" && job.companyPage) {
+    const companyPage = await CompanyPage.findById(job.companyPage).select("_id shareNewJobs");
+    await shareCompanyPageJob(job, companyPage);
+    await notifyMatchingJobAlerts(job);
+  }
+  if (req.body.status !== "open" && existingJob.status === "open" && job.savedBy?.length) {
     await Promise.all(job.savedBy.map((recipient) => createNotification({
       recipient,
       sender: req.user._id,
@@ -218,10 +351,14 @@ export const getCandidateJob = async (req, res) => {
   if (!isId(req.params.jobId)) return res.status(400).json({ message: "Invalid job ID" });
   let job = await Job.findById(req.params.jobId).populate("postedBy", "name headline profilePicture");
   if (!job) return res.status(404).json({ message: "Job not found" });
-  const isOwner = job.postedBy?._id?.toString() === req.user._id.toString();
-  if (job.status === "closed" && !isOwner) return res.status(404).json({ message: "This job is no longer accepting applications" });
+  const isOwner = job.postedBy?._id?.toString() === req.user._id.toString()
+    || Boolean(job.companyPage && await CompanyPage.exists({ _id: job.companyPage, owner: req.user._id }));
+  if (job.companyPage && !(await CompanyPage.exists({ _id: job.companyPage, active: { $ne: false } })) && !isOwner) {
+    return res.status(404).json({ message: "This job is no longer available" });
+  }
+  if (job.status !== "open" && !isOwner) return res.status(404).json({ message: "This job is no longer accepting applications" });
   if (!isOwner) {
-    job = await Job.findByIdAndUpdate(job._id, { $inc: { views: 1 } }, { new: true }).populate("postedBy", "name headline profilePicture");
+    job = await Job.findByIdAndUpdate(job._id, { $inc: { views: 1 } }, { returnDocument: "after" }).populate("postedBy", "name headline profilePicture");
   }
   return res.json({ job, isOwner });
 };
@@ -229,6 +366,26 @@ export const getCandidateJob = async (req, res) => {
 export const createJob = async (req, res) => {
   try {
     const { title, company, location, type, level, workMode, salary, description, tags, industry, jobFunction } = req.body;
+    const companyPageId = req.body.companyPageId;
+    let companyPage = null;
+    if (companyPageId) {
+      if (!isId(companyPageId)) return res.status(400).json({ message: "Invalid company page ID" });
+      companyPage = await CompanyPage.findOne({ _id: companyPageId, active: { $ne: false } })
+        .select("_id name owner jobPostingDomains basicJobPostingEnabled shareNewJobs");
+      if (!companyPage) return res.status(404).json({ message: "Company page not found" });
+      const emailDomains = [
+        ...(req.user.emailVerified ? [req.user.email] : []),
+        ...(req.user.securityEmails || []).filter((entry) => entry.verified).map((entry) => entry.email),
+      ].map((email) => email.split("@").pop()?.toLowerCase()).filter(Boolean);
+      const isPageOwner = companyPage.owner.toString() === req.user._id.toString();
+      const canPostForPage = companyPage.basicJobPostingEnabled
+        && emailDomains.some((domain) => companyPage.jobPostingDomains.includes(domain));
+      if (!isPageOwner && !canPostForPage) return res.status(403).json({ message: "Only the page owner or a verified member of an approved email domain can post jobs for this page" });
+      if (req.body.status !== undefined && !["open", "draft"].includes(req.body.status)) {
+        return res.status(400).json({ message: "New Company Page jobs can only be opened or saved as drafts" });
+      }
+    }
+    const status = companyPage && req.body.status === "draft" ? "draft" : "open";
     const requiredFields = [
       ["title", title, 160],
       ["company", company, 160],
@@ -239,20 +396,20 @@ export const createJob = async (req, res) => {
       ["job description", description, 3000],
     ];
     for (const [label, value, maxLength] of requiredFields) {
-      if (typeof value !== "string" || !value.trim()) {
+      if (typeof value !== "string" || (status !== "draft" && !value.trim())) {
         return res.status(400).json({ message: `${label} is required` });
       }
       if (value.trim().length > maxLength) {
         return res.status(400).json({ message: `${label} must be ${maxLength} characters or fewer` });
       }
     }
-    if (!["Full-time", "Part-time", "Contract", "Temporary", "Internship"].includes(type.trim())) {
+    if (type && !["Full-time", "Part-time", "Contract", "Temporary", "Internship"].includes(type.trim())) {
       return res.status(400).json({ message: "Choose a valid employment type" });
     }
-    if (!["Internship", "Entry level", "Associate", "Mid-Senior", "Director", "Executive"].includes(level.trim())) {
+    if (level && !["Internship", "Entry level", "Associate", "Mid-Senior", "Director", "Executive"].includes(level.trim())) {
       return res.status(400).json({ message: "Choose a valid experience level" });
     }
-    if (!["On-site", "Hybrid", "Remote"].includes(workMode.trim())) {
+    if (workMode && !["On-site", "Hybrid", "Remote"].includes(workMode.trim())) {
       return res.status(400).json({ message: "Choose a valid workplace type" });
     }
     if (salary !== undefined && (typeof salary !== "string" || salary.trim().length > 100)) {
@@ -269,7 +426,7 @@ export const createJob = async (req, res) => {
     }
     const job = await Job.create({
       title: title.trim(),
-      company: company.trim(),
+      company: (companyPage?.name || company).trim(),
       location: location.trim(),
       type: type.trim(),
       level: level.trim(),
@@ -280,30 +437,35 @@ export const createJob = async (req, res) => {
       industry: industry?.trim() || "",
       jobFunction: jobFunction?.trim() || "",
       postedBy: req.user._id,
+      companyPage: companyPage?._id || null,
+      status,
     });
-    await notifyMatchingJobAlerts(job);
-    const hiringConnections = await Connection.find({
-      status: CONNECTION_STATUS.ACCEPTED,
-      $or: [{ requester: job.postedBy }, { recipient: job.postedBy }],
-    }).select("requester recipient");
-    const hiringRecipients = hiringConnections.map((connection) =>
-      connection.requester.toString() === job.postedBy.toString()
-        ? connection.recipient
-        : connection.requester,
-    );
-    await Promise.all(hiringRecipients.map((recipient) => createNotification({
-      recipient,
-      sender: job.postedBy,
-      type: NOTIFICATION_TYPES.NETWORK_HIRING,
-      job: job._id,
-      details: `${job.company} is hiring for ${job.title}.`,
-    })));
+    if (companyPage && job.status === "open") await shareCompanyPageJob(job, companyPage);
+    if (job.status === "open") {
+      await notifyMatchingJobAlerts(job);
+      const hiringConnections = await Connection.find({
+        status: CONNECTION_STATUS.ACCEPTED,
+        $or: [{ requester: job.postedBy }, { recipient: job.postedBy }],
+      }).select("requester recipient");
+      const hiringRecipients = hiringConnections.map((connection) =>
+        connection.requester.toString() === job.postedBy.toString()
+          ? connection.recipient
+          : connection.requester,
+      );
+      await Promise.all(hiringRecipients.map((recipient) => createNotification({
+        recipient,
+        sender: job.postedBy,
+        type: NOTIFICATION_TYPES.NETWORK_HIRING,
+        job: job._id,
+        details: `${job.company} is hiring for ${job.title}.`,
+      })));
+    }
     return res.status(201).json({
       job: {
         ...job.toObject(),
         saved: false,
         application: null,
-        posted: "Today",
+        posted: job.status === "open" ? "Today" : null,
       },
     });
   } catch (error) {
@@ -389,7 +551,7 @@ export const saveJobAlert = async (req, res) => {
     const alert = await JobAlert.findOneAndUpdate(
       { user: req.user._id },
       { $set: { title: title.trim(), location: location.trim(), workMode, type: type.trim(), level: level.trim(), frequency, active } },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+      { returnDocument: "after", upsert: true, runValidators: true, setDefaultsOnInsert: true },
     );
     return res.json({ alert });
   } catch (error) {
@@ -412,6 +574,10 @@ export const toggleSavedJob = async (req, res) => {
   if (!isId(req.params.jobId)) return res.status(400).json({ message: "Invalid job ID" });
   const job = await Job.findById(req.params.jobId);
   if (!job) return res.status(404).json({ message: "Job not found" });
+  if (job.status !== "open") return res.status(409).json({ message: "This job is not available to save" });
+  if (job.companyPage && !(await CompanyPage.exists({ _id: job.companyPage, active: { $ne: false } }))) {
+    return res.status(404).json({ message: "This job is no longer available" });
+  }
   const index = job.savedBy.findIndex((id) => id.toString() === req.user._id.toString());
   if (index >= 0) job.savedBy.splice(index, 1);
   else job.savedBy.push(req.user._id);
@@ -423,7 +589,10 @@ export const applyToJob = async (req, res) => {
   if (!isId(req.params.jobId)) return res.status(400).json({ message: "Invalid job ID" });
   const job = await Job.findById(req.params.jobId);
   if (!job) return res.status(404).json({ message: "Job not found" });
-  if (job.status === "closed") return res.status(409).json({ message: "This job is closed and is no longer accepting applications" });
+  if (job.status !== "open") return res.status(409).json({ message: "This job is not accepting applications" });
+  if (job.companyPage && !(await CompanyPage.exists({ _id: job.companyPage, active: { $ne: false } }))) {
+    return res.status(404).json({ message: "This job is no longer available" });
+  }
   const { fullName, email, phone = "", resume = "", resumeRef = null, coverLetter = "" } = req.body;
   if (typeof fullName !== "string" || !fullName.trim() || fullName.trim().length > 120) {
     return res.status(400).json({ message: "Enter your full name (up to 120 characters)" });
@@ -479,7 +648,7 @@ export const getMyApplications = async (req, res) => {
 };
 
 export const getEmployerApplications = async (req, res) => {
-  const jobs = await Job.find({ postedBy: req.user._id }).select("_id");
+  const jobs = await Job.find(await managedJobAccess(req.user._id)).select("_id");
   const applications = await JobApplication.find({ job: { $in: jobs.map((job) => job._id) } })
     .populate("job", "title company location")
     .populate("applicant", "name headline profilePicture")
@@ -491,8 +660,10 @@ export const getEmployerApplications = async (req, res) => {
 
 export const getApplicationResumeUrl = async (req, res) => {
   if (!isId(req.params.applicationId)) return res.status(400).json({ message: "Invalid application ID" });
-  const application = await JobApplication.findById(req.params.applicationId).populate("job", "postedBy");
-  if (!application || application.job?.postedBy?.toString() !== req.user._id.toString()) {
+  const application = await JobApplication.findById(req.params.applicationId).populate("job", "postedBy companyPage");
+  const isPageOwner = application?.job?.companyPage
+    && await CompanyPage.exists({ _id: application.job.companyPage, owner: req.user._id });
+  if (!application || (application.job?.postedBy?.toString() !== req.user._id.toString() && !isPageOwner)) {
     return res.status(404).json({ message: "Application not found" });
   }
   if (!application.resumeRef) return res.status(404).json({ message: "No saved resume was attached to this application" });
@@ -512,7 +683,8 @@ export const updateApplicationStatus = async (req, res) => {
   const application = await JobApplication.findById(req.params.applicationId).populate("job");
   if (!application) return res.status(404).json({ message: "Application not found" });
   const isApplicant = application.applicant.toString() === req.user._id.toString();
-  const isJobOwner = application.job?.postedBy?.toString() === req.user._id.toString();
+  const isJobOwner = application.job?.postedBy?.toString() === req.user._id.toString()
+    || Boolean(application.job?.companyPage && await CompanyPage.exists({ _id: application.job.companyPage, owner: req.user._id }));
   if (!isApplicant && !isJobOwner) return res.status(404).json({ message: "Application not found" });
   if (isApplicant && req.body.status !== "withdrawn") {
     return res.status(403).json({ message: "Applicants can only withdraw their own application" });

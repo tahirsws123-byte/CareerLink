@@ -80,19 +80,8 @@ export default function HeroSection() {
           </div>
 
           <p className="mt-4 max-w-[360px] text-[12px] leading-[1.5] text-muted-ink">
-            By clicking Continue to join or sign in, you agree to CareerLink's{" "}
-            <a href="#" className="text-brand hover:underline">
-              User Agreement
-            </a>
-            ,{" "}
-            <a href="#" className="text-brand hover:underline">
-              Privacy Policy
-            </a>
-            , and{" "}
-            <a href="#" className="text-brand hover:underline">
-              Cookie Policy
-            </a>
-            .
+            CareerLink&apos;s User Agreement, Privacy Policy, and Cookie Policy
+            are not available yet.
           </p>
 
           <p className="mt-7 text-base text-ink">

@@ -8,6 +8,8 @@ const eventCommentReportSchema = new mongoose.Schema(
     reason: { type: String, enum: ["spam", "harassment", "misinformation", "inappropriate", "other"], required: true },
     details: { type: String, trim: true, maxlength: 1000, default: "" },
     status: { type: String, enum: ["open", "reviewed", "dismissed"], default: "open" },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    reviewedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

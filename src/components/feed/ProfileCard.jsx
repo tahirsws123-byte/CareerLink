@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import {
   Bookmark,
+  Building2,
   CalendarDays,
   MapPin,
   Newspaper,
@@ -13,6 +14,7 @@ import Avatar from "../layout/Avatar";
 import { useEffect, useState } from "react";
 import { getConnectionCount } from "../../services/connectionServices.js";
 import useTranslation from "../../hooks/useTranslation";
+import { getMyCompanyPages } from "../../services/companyPageServices.js";
 
 const getInitials = (name) => {
   if (!name) return "U";
@@ -51,6 +53,7 @@ export default function ProfileCard({
   const t = useTranslation();
   const isNotificationsCard = variant === "notifications";
   const [connectionCount, setConnectionCount] = useState(null);
+  const [companyPages, setCompanyPages] = useState([]);
 
   useEffect(() => {
     if (variant !== "default") return undefined;
@@ -61,6 +64,21 @@ export default function ProfileCard({
       })
       .catch((error) => {
         console.error("Unable to load connection count:", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [variant]);
+
+  useEffect(() => {
+    if (variant !== "default") return undefined;
+    let active = true;
+    getMyCompanyPages()
+      .then((pages) => {
+        if (active) setCompanyPages(pages);
+      })
+      .catch((error) => {
+        console.error("Unable to load your company pages:", error);
       });
     return () => {
       active = false;
@@ -188,6 +206,26 @@ export default function ProfileCard({
               {t("Newsletters")}
             </Link>
           </nav>
+          {variant === "default" && companyPages.length > 0 && (
+            <section className="border-t border-gray-200 px-4 py-3">
+              <div className="space-y-2">
+                  {companyPages.map((page) => (
+                    <Link
+                      key={page._id}
+                      to={`/company-pages/${page._id}/manage`}
+                      className="flex items-center gap-2 rounded-md py-1 text-sm font-medium text-ink hover:text-brand"
+                    >
+                      {page.logo?.url ? (
+                        <img src={page.logo.url} alt="" className="h-6 w-6 shrink-0 rounded-sm object-cover" />
+                      ) : (
+                        <Building2 size={20} className="shrink-0 text-brand" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{page.name}</span>
+                    </Link>
+                  ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>

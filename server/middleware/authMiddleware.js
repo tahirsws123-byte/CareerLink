@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js';
+import getAuthSessionError from "../utils/getAuthSessionError.js";
 
 export const Protect = async (req, res, next) => {
     try{
@@ -23,13 +24,8 @@ export const Protect = async (req, res, next) => {
             });
         }
 
-        if (user.enforceTrackedSessions && !decoded.sid) {
-            return res.status(401).json({ message: "Please sign in again to continue" });
-        }
-
-        if (decoded.sid && !user.securitySessions?.some((session) => session.sessionId === decoded.sid)) {
-            return res.status(401).json({ message: "This session has been signed out" });
-        }
+        const sessionError = getAuthSessionError(user, decoded.sid);
+        if (sessionError) return res.status(401).json({ message: sessionError });
 
         req.user = user;
         req.authSessionId = decoded.sid || "";

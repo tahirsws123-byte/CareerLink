@@ -8,9 +8,10 @@ import Job from "../models/Job.js";
 import JobApplication from "../models/JobApplication.js";
 import Connection, { CONNECTION_STATUS } from "../models/Connection.js";
 import User from "../models/User.js";
+import CompanyPage from "../models/CompanyPage.js";
 import { NOTIFICATION_TYPES } from "../models/Notification.js";
 import { createNotification } from "../utils/notificationUtils.js";
-import { uploadBufferToCloudinary } from "../utils/cloudinaryUpload.js";
+import { destroyCloudinaryAsset, uploadBufferToCloudinary } from "../utils/cloudinaryUpload.js";
 
 const participantFields = "name email headline profilePicture";
 
@@ -27,6 +28,7 @@ const canMessageRecipient = async (senderId, recipientId) => {
 const populateConversation = (query) =>
   query
     .populate("participants", participantFields)
+    .populate("companyPage", "name publicUrlSlug")
     .populate({
       path: "lastMessage",
       populate: [
@@ -61,6 +63,8 @@ const serializeConversation = (
   return {
     _id: conversation._id,
     type: conversation.type || "message",
+    companyPage: conversation.companyPage || null,
+    companyPageTopic: conversation.companyPageTopic || "",
     participants: conversation.participants,
     otherParticipant,
     lastMessage: conversation.lastMessage,
@@ -328,7 +332,7 @@ export const updateConversationAction = async (req, res) => {
 
 export const createOrGetConversation = async (req, res) => {
   try {
-    const { participantId } = req.body;
+    const { participantId, companyPageId, companyPageTopic } = req.body;
 
     if (!mongoose.isValidObjectId(participantId)) {
       return res.status(400).json({
@@ -340,6 +344,25 @@ export const createOrGetConversation = async (req, res) => {
       return res.status(400).json({
         message: "You cannot message yourself",
       });
+    }
+
+    let companyPage = null;
+    if (companyPageId !== undefined) {
+      if (!mongoose.isValidObjectId(companyPageId)) return res.status(400).json({ message: "Invalid Company Page ID" });
+      companyPage = await CompanyPage.findOne({
+        _id: companyPageId,
+        owner: participantId,
+        active: { $ne: false },
+      }).select("messagingEnabled conversationTopics blockedMembers");
+      if (!companyPage || !companyPage.messagingEnabled) return res.status(404).json({ message: "This Company Page is not accepting messages" });
+      if ((companyPage.blockedMembers || []).some((id) => id.toString() === req.user._id.toString())) {
+        return res.status(403).json({ message: "This Company Page does not accept messages from your account" });
+      }
+      if (!companyPage.conversationTopics.includes(companyPageTopic)) {
+        return res.status(400).json({ message: "Choose a valid conversation topic" });
+      }
+    } else if (companyPageTopic !== undefined) {
+      return res.status(400).json({ message: "A Company Page is required for this conversation topic" });
     }
 
     const participant = await User.findById(participantId).select("_id dataPrivacyPreferences.allowMessageRequests");
@@ -376,11 +399,16 @@ export const createOrGetConversation = async (req, res) => {
         participants,
         pairKey,
         type: isConnected ? "message" : "inmail",
+        ...(companyPage ? { companyPage: companyPage._id, companyPageTopic } : {}),
       });
     } else if (conversation.type !== (isConnected ? "message" : "inmail")) {
       conversation.type = isConnected ? "message" : "inmail";
-      await conversation.save();
     }
+    if (companyPage) {
+      conversation.companyPage = companyPage._id;
+      conversation.companyPageTopic = companyPageTopic;
+    }
+    await conversation.save();
 
     const populatedConversation = await populateConversation(
       Conversation.findById(conversation._id),
@@ -483,6 +511,9 @@ export const getMessages = async (req, res) => {
 };
 
 export const sendMessage = async (req, res) => {
+  let uploadedAttachment;
+  let attachmentSaved = false;
+
   try {
     const { text, postId, jobId } = req.body;
     const cleanText = text?.trim();
@@ -524,24 +555,6 @@ export const sendMessage = async (req, res) => {
     let post = null;
     let job = null;
     let attachment = null;
-    if (req.file) {
-      const resourceType = req.file.mimetype.startsWith("image/")
-        ? "image"
-        : req.file.mimetype.startsWith("video/")
-          ? "video"
-          : "raw";
-      const uploadResult = await uploadBufferToCloudinary(req.file, {
-        folder: "careerlink/messages",
-        resource_type: resourceType,
-      });
-      attachment = {
-        url: uploadResult.secure_url,
-        publicId: uploadResult.public_id,
-        name: req.file.originalname,
-        type: req.file.mimetype,
-      };
-    }
-
     if (postId) {
       if (!mongoose.isValidObjectId(postId)) {
         return res.status(400).json({
@@ -566,6 +579,27 @@ export const sendMessage = async (req, res) => {
       if (!job) return res.status(404).json({ message: "Job not found" });
     }
 
+    if (req.file) {
+      const resourceType = req.file.mimetype.startsWith("image/")
+        ? "image"
+        : req.file.mimetype.startsWith("video/")
+          ? "video"
+          : "raw";
+      uploadedAttachment = await uploadBufferToCloudinary(req.file, {
+        folder: "careerlink/messages",
+        resource_type: resourceType,
+      });
+      if (!uploadedAttachment?.secure_url || !uploadedAttachment?.public_id) {
+        throw new Error("Message attachment upload did not return an asset URL");
+      }
+      attachment = {
+        url: uploadedAttachment.secure_url,
+        publicId: uploadedAttachment.public_id,
+        name: req.file.originalname,
+        type: req.file.mimetype,
+      };
+    }
+
     const message = await Message.create({
       conversation: conversation._id,
       sender: req.user._id,
@@ -575,6 +609,7 @@ export const sendMessage = async (req, res) => {
       attachment,
       readBy: [req.user._id],
     });
+    attachmentSaved = true;
 
     const otherParticipants = conversation.participants.filter(
       (participantId) =>
@@ -633,6 +668,16 @@ export const sendMessage = async (req, res) => {
       message: populatedMessage,
     });
   } catch (error) {
+    if (uploadedAttachment?.public_id && !attachmentSaved) {
+      const resourceType = req.file?.mimetype?.startsWith("video/")
+        ? "video"
+        : req.file?.mimetype?.startsWith("image/")
+          ? "image"
+          : "raw";
+      await destroyCloudinaryAsset(uploadedAttachment.public_id, {
+        resource_type: resourceType,
+      });
+    }
     console.error("Send message error:", error);
 
     return res.status(500).json({
@@ -661,7 +706,29 @@ export const updateMessageAction = async (req, res) => {
       await Conversation.updateOne({ _id: conversation._id }, { $set: { lastMessage: reply._id }, $addToSet: { unreadBy: { $each: conversation.participants.filter((id) => id.toString() !== req.user._id.toString()) } } });
       return res.status(201).json({ message: await reply.populate("sender", "name profilePicture") });
     } else if (action === "delete") {
+      if (message.sender.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: "You can only delete your own messages" });
+      }
+
+      const wasLastMessage = conversation.lastMessage?.toString() === message._id.toString();
       await message.deleteOne();
+      if (wasLastMessage) {
+        const latestMessage = await Message.findOne({ conversation: conversation._id })
+          .sort({ createdAt: -1 })
+          .select("_id");
+        conversation.lastMessage = latestMessage?._id || null;
+      }
+
+      const unreadBy = await Promise.all(conversation.participants.map(async (participantId) => {
+        const hasUnreadMessages = await Message.exists({
+          conversation: conversation._id,
+          sender: { $ne: participantId },
+          readBy: { $ne: participantId },
+        });
+        return hasUnreadMessages ? participantId : null;
+      }));
+      conversation.unreadBy = unreadBy.filter(Boolean);
+      await conversation.save();
       return res.status(200).json({ deleted: true, messageId: message._id });
     } else return res.status(400).json({ message: "Unsupported message action" });
     await message.save();

@@ -25,8 +25,11 @@ import Conversation from "../models/Conversation.js";
 import Article from "../models/Article.js";
 import Comment from "../models/Comment.js";
 import Event from "../models/Event.js";
+import EventCommentReport from "../models/EventCommentReport.js";
+import EventReport from "../models/EventReport.js";
 import Group from "../models/Group.js";
 import Job from "../models/Job.js";
+import CompanyPage from "../models/CompanyPage.js";
 import JobAlert from "../models/JobAlert.js";
 import JobReport from "../models/JobReport.js";
 import Newsletter from "../models/Newsletter.js";
@@ -38,12 +41,16 @@ import { isNotificationEmailConfigured } from "../utils/notificationEmail.js";
 import { createNotification } from "../utils/notificationUtils.js";
 import { NOTIFICATION_TYPES } from "../models/Notification.js";
 
+const moderationReportModels = [PostReport, JobReport, EventReport, EventCommentReport];
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_TOKEN_INFO_URL = "https://oauth2.googleapis.com/tokeninfo";
 const GOOGLE_USER_INFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo";
+const GOOGLE_STATE_COOKIE = "careerlink_google_oauth_state";
+const GOOGLE_STATE_TTL_SECONDS = 300;
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 
 const FIELD_LIMITS = {
@@ -429,6 +436,33 @@ const getGoogleCallbackUrl = (req) => {
 const hasGoogleConfig = () =>
   Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
+const setGoogleStateCookie = (req, res, state, maxAge) => {
+  const secure = req.secure || process.env.NODE_ENV === "production";
+  res.append(
+    "Set-Cookie",
+    `${GOOGLE_STATE_COOKIE}=${state}; Path=/api/users/auth/google/callback; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`,
+  );
+};
+
+const isValidGoogleOAuthState = (req) => {
+  const state = req.query.state;
+  const cookie = req.headers.cookie
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${GOOGLE_STATE_COOKIE}=`))
+    ?.slice(GOOGLE_STATE_COOKIE.length + 1);
+  if (
+    typeof state !== "string"
+    || !/^[a-f0-9]{64}$/i.test(state)
+    || !cookie
+    || !/^[a-f0-9]{64}$/i.test(cookie)
+  ) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(Buffer.from(state, "hex"), Buffer.from(cookie, "hex"));
+};
+
 const hasMailConfig = () =>
   Boolean(
     process.env.SMTP_HOST &&
@@ -801,21 +835,31 @@ export const startGoogleAuth = async (req, res) => {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("scope", "openid email profile");
   url.searchParams.set("prompt", "select_account");
+  const state = crypto.randomBytes(32).toString("hex");
+  setGoogleStateCookie(req, res, state, GOOGLE_STATE_TTL_SECONDS);
+  url.searchParams.set("state", state);
 
   return res.redirect(url.toString());
 };
 
 export const handleGoogleCallback = async (req, res) => {
   try {
-    if (req.query.error) {
-      return redirectWithOAuthError(res, "Google sign-in was cancelled");
-    }
-
     if (!hasGoogleConfig()) {
       return redirectWithOAuthError(
         res,
         "Google sign-in is not configured yet",
       );
+    }
+
+    if (!isValidGoogleOAuthState(req)) {
+      setGoogleStateCookie(req, res, "", 0);
+      return redirectWithOAuthError(res, "Google sign-in request expired or invalid");
+    }
+
+    setGoogleStateCookie(req, res, "", 0);
+
+    if (req.query.error) {
+      return redirectWithOAuthError(res, "Google sign-in was cancelled");
     }
 
     const code = req.query.code;
@@ -839,6 +883,18 @@ export const handleGoogleCallback = async (req, res) => {
     });
 
     if (!tokenResponse.ok) {
+      const tokenError = await tokenResponse.json();
+      const providerError =
+        tokenError &&
+        typeof tokenError === "object" &&
+        typeof tokenError.error === "string" &&
+        /^[a-z0-9_]{1,64}$/i.test(tokenError.error)
+          ? tokenError.error
+          : "unknown";
+      console.error("Google OAuth token exchange rejected:", {
+        status: tokenResponse.status,
+        error: providerError,
+      });
       return redirectWithOAuthError(res, "Google sign-in could not be completed");
     }
 
@@ -856,7 +912,10 @@ export const handleGoogleCallback = async (req, res) => {
   } catch (error) {
     console.error("Google OAuth error:", error.message);
 
-    return redirectWithOAuthError(res, "Google sign-in failed");
+    return redirectWithOAuthError(
+      res,
+      error.statusCode === 503 ? error.message : "Google sign-in failed",
+    );
   }
 };
 
@@ -2829,6 +2888,11 @@ export const deleteAccount = async (req, res) => {
         return res.status(401).json({ message: "Current password is incorrect" });
       }
     }
+    if (await CompanyPage.exists({ owner: user._id })) {
+      return res.status(409).json({
+        message: "Transfer ownership of your Company Pages before deleting your account.",
+      });
+    }
 
     const userId = user._id;
     const userIdString = userId.toString();
@@ -2846,6 +2910,12 @@ export const deleteAccount = async (req, res) => {
     const groupIds = groups.map((group) => group._id);
     const events = await Event.find({ organizer: userId }).select("_id").lean();
     const eventIds = events.map((event) => event._id);
+    const eventsWithAuthoredComments = await Event.find({ "comments.author": userId })
+      .select("_id comments._id")
+      .lean();
+    const eventCommentIds = eventsWithAuthoredComments.flatMap((event) =>
+      (event.comments || []).map((comment) => comment._id),
+    );
     const newsletters = await Newsletter.find({ author: userId }).select("_id").lean();
     const newsletterIds = newsletters.map((newsletter) => newsletter._id);
     const conversations = await Conversation.find({ participants: userId }).select("_id").lean();
@@ -2927,6 +2997,26 @@ export const deleteAccount = async (req, res) => {
     await JobAlert.deleteMany({ user: userId });
     await Article.deleteMany({ _id: { $in: articleIds } });
     await Group.deleteMany({ _id: { $in: groupIds } });
+    await EventReport.deleteMany({
+      $or: [{ reporter: userId }, ...(eventIds.length ? [{ event: { $in: eventIds } }] : [])],
+    });
+    await EventCommentReport.deleteMany({
+      $or: [
+        { reporter: userId },
+        ...(eventIds.length ? [{ event: { $in: eventIds } }] : []),
+        ...(eventCommentIds.length ? [{ comment: { $in: eventCommentIds } }] : []),
+      ],
+    });
+    await Promise.all(moderationReportModels.map((Report) => Report.updateMany(
+      { reviewedBy: userId },
+      { $unset: { reviewedBy: 1, reviewedAt: 1 } },
+    )));
+    if (eventCommentIds.length) {
+      await Event.updateMany(
+        { "comments.author": userId },
+        { $pull: { comments: { author: userId } } },
+      );
+    }
     await Event.deleteMany({ _id: { $in: eventIds } });
     await Newsletter.deleteMany({ _id: { $in: newsletterIds } });
     await Message.deleteMany({ _id: { $in: messageIds } });
@@ -2953,6 +3043,15 @@ export const deleteAccount = async (req, res) => {
           savedPosts: { $in: allPostIds },
           savedArticles: { $in: articleIds },
           "notificationPreferences.mutedSenders": userId,
+        },
+      },
+    );
+    await CompanyPage.updateMany(
+      {},
+      {
+        $pull: {
+          admins: { user: userId },
+          followers: { user: userId },
         },
       },
     );

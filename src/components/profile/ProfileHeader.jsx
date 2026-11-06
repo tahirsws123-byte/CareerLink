@@ -153,7 +153,7 @@ const ProfileHeader = ({
       const data = await uploadProfileImage(file);
       onProfileImageUpload(data.profilePicture);
     } catch (error) {
-      console.log(error);
+      toast.error(error.response?.data?.message || "Unable to upload profile image");
     } finally {
       setUploading(false);
     }
@@ -189,7 +189,7 @@ const ProfileHeader = ({
 
       onCoverImageUpload(data.coverPicture);
     } catch (error) {
-      console.error(error);
+      toast.error(error.response?.data?.message || "Unable to upload cover image");
     } finally {
       setCoverUploading(false);
       e.target.value = "";

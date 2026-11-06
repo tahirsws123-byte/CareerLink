@@ -211,7 +211,6 @@ export default function ComposePost({ onPost, plain = false }) {
         <button
           disabled={!text.trim() && !selectedImage && !selectedVideo}
           onClick={() => {
-            console.log("POST BUTTON CLICKED");
             onPost({
               text: text.trim(),
               image: selectedImage,

@@ -18,17 +18,15 @@ import {
 } from "../controllers/postController.js";
 import { Protect } from "../middleware/authMiddleware.js";
 import { OptionalAuth } from "../middleware/optionalAuthMiddleware.js";
-import upload, { handlePostUploadError } from "../middleware/uploadMiddleware.js";
+import { postMediaUpload } from "../middleware/uploadMiddleware.js";
+import { uploadRateLimit } from "../middleware/rateLimiters.js";
 
 const router = express.Router();
 const receivePostMedia = (req, res, next) => {
-  upload.fields([
+  postMediaUpload.fields([
     { name: "image", maxCount: 1 },
     { name: "video", maxCount: 1 },
-  ])(req, res, (error) => {
-    if (error) return handlePostUploadError(error, req, res, next);
-    return next();
-  });
+  ])(req, res, next);
 };
 
 router.get("/saved", Protect, getSavedPosts);
@@ -41,6 +39,7 @@ router.get("/", Protect, getPosts);
 router.post(
   "/",
   Protect,
+  uploadRateLimit,
   receivePostMedia,
   createPost,
 );
@@ -58,6 +57,7 @@ router.delete("/:id", Protect, deletePost);
 router.put(
   "/:id",
   Protect,
+  uploadRateLimit,
   receivePostMedia,
   updatePost,
 );

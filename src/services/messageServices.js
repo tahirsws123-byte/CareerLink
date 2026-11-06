@@ -10,9 +10,10 @@ export const getUnreadMessageCount = async () => {
   return data;
 };
 
-export const createOrGetConversation = async (participantId) => {
+export const createOrGetConversation = async (participantId, companyPageContext = {}) => {
   const { data } = await api.post("/messages/conversations", {
     participantId,
+    ...companyPageContext,
   });
 
   return data.conversation;

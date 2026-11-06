@@ -139,28 +139,12 @@ export default function Register() {
                 onChange={handleChange("password")}
               />
 
-              <p className="pt-1 text-[12px] leading-relaxed text-muted-ink">
-                By clicking Agree & Join, you agree to CareerLink&apos;s{" "}
-                <a href="#" className="text-brand hover:underline">
-                  User Agreement
-                </a>
-                ,{" "}
-                <a href="#" className="text-brand hover:underline">
-                  Privacy Policy
-                </a>
-                , and{" "}
-                <a href="#" className="text-brand hover:underline">
-                  Cookie Policy
-                </a>
-                .
-              </p>
-
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full rounded-full bg-brand py-2.5 text-[15px] font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Creating account..." : "Agree & Join"}
+                {loading ? "Creating account..." : "Create account"}
               </button>
             </form>
 

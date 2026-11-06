@@ -24,6 +24,12 @@ const conversationSchema = new mongoose.Schema(
       enum: ["message", "inmail"],
       default: "message",
     },
+    companyPage: { type: mongoose.Schema.Types.ObjectId, ref: "CompanyPage", default: null },
+    companyPageTopic: {
+      type: String,
+      enum: ["Service request", "Request a demo", "Support", "Careers", "Other", ""],
+      default: "",
+    },
 
     lastMessage: {
       type: mongoose.Schema.Types.ObjectId,

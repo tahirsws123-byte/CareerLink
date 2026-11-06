@@ -5,6 +5,7 @@ import useAuth from "../hooks/useAuth.js";
 import ProfileCard from "../components/feed/ProfileCard.jsx";
 import ProfileViewers from "../components/profile/ProfileViewers.jsx";
 import api from "../services/api.js";
+import { sumPostReactions } from "../utils/analyticsMetrics.js";
 
 const navigation = [
   { label: "Overview", to: "/dashboard", icon: BarChart3 },
@@ -109,7 +110,7 @@ function Overview({ analytics }) {
   const cards = [
     { label: "Post impressions", value: analytics.totals.legacyPostImpressions, icon: BarChart3, note: "Lifetime views of your posts", to: "/dashboard/content" },
     { label: "Total followers", value: analytics.totals.followers, icon: UsersRound, note: `${number(analytics.totals.newFollowers)} new in the selected period` },
-    { label: "Profile viewers", value: analytics.totals.profileViews, icon: Eye, note: `Recorded in the last ${analytics.days} days`, to: "/dashboard/profile-views" },
+    { label: "Profile views", value: analytics.totals.profileViews, icon: Eye, note: `Recorded in the last ${analytics.days} days`, to: "/dashboard/profile-views" },
     { label: "Search appearances", value: analytics.totals.legacySearchAppearances, icon: Search, note: "Times your profile appeared in search", to: "/dashboard/search-appearances" },
     { label: "Newsletter article views in 7 days", value: 0, icon: BookOpen, note: "Article view tracking is not available yet", to: "/newsletters" },
     { label: "New newsletter subscribers in 7 days", value: 0, icon: UsersRound, note: "Subscriber growth tracking is not available yet", to: "/newsletters" },
@@ -145,7 +146,7 @@ function Overview({ analytics }) {
 function ContentAnalytics({ analytics, days, dateRange }) {
   const engagement = analytics.content.reduce((sum, post) => sum + post.engagement, 0);
   const metric = [
-    ["Reactions", analytics.content.reduce((sum, post) => sum + post.likesCount, 0), Eye],
+    ["Reactions", sumPostReactions(analytics.content), Eye],
     ["Comments", analytics.content.reduce((sum, post) => sum + post.commentsCount, 0), MessageCircle],
     ["Reposts", analytics.content.reduce((sum, post) => sum + post.repostsCount, 0), Repeat2],
     ["Saves", analytics.content.reduce((sum, post) => sum + post.savesCount, 0), Bookmark],
@@ -161,7 +162,7 @@ function ContentAnalytics({ analytics, days, dateRange }) {
     <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <h2 className="text-base font-semibold text-ink">Discovery</h2>
       <p className="mt-1 text-xs text-muted-ink">How people find your profile and content over {days} days</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2"><MetricTile label="Post impressions" value={analytics.totals.postImpressions} /><MetricTile label="Members reached" value={analytics.totals.profileViews} /><MetricTile label="Search appearances" value={analytics.totals.searchAppearances} /></div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2"><MetricTile label="Post impressions" value={analytics.totals.postImpressions} /><MetricTile label="Profile views" value={analytics.totals.profileViews} /><MetricTile label="Search appearances" value={analytics.totals.searchAppearances} /></div>
     </section>
     <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-base font-semibold text-ink">Engagement</h2><span className="text-sm text-muted-ink">{number(engagement)} actions on your recent posts</span></div>

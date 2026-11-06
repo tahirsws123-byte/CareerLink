@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Mail, Lock } from "lucide-react";
 import toast from "react-hot-toast";
 import api from "../services/api.js";
@@ -12,8 +12,8 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const oauthError = searchParams.get("oauthError");
@@ -42,21 +42,50 @@ export default function Login() {
         password,
       });
 
-      const { _id, name, email, profilePicture, token } = response.data;
+      const {
+        _id,
+        name,
+        email,
+        headline,
+        location: userLocation,
+        hasPassword,
+        profilePicture,
+        coverPicture,
+        profileViews,
+        postImpressions,
+        token,
+      } = response.data;
 
       login(
         {
           _id,
           name,
           email,
+          headline,
+          location: userLocation,
+          hasPassword,
           profilePicture,
+          coverPicture,
+          profileViews,
+          postImpressions,
         },
         token
       );
 
       toast.success("Login successful");
 
-      navigate("/feed", { replace: true });
+      const returnTo = location.state?.from;
+      const returnPath =
+        typeof returnTo === "string"
+          ? returnTo
+          : returnTo && typeof returnTo.pathname === "string"
+            ? `${returnTo.pathname}${returnTo.search || ""}${returnTo.hash || ""}`
+            : "";
+      const destination =
+        returnPath.startsWith("/") && !returnPath.startsWith("//")
+          ? returnPath
+          : "/feed";
+      navigate(destination, { replace: true });
     } catch (error) {
       toast.error(error.response?.data?.message || "Unable to login");
     } finally {

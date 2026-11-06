@@ -6,14 +6,14 @@ export const uploadBufferToCloudinary = (file, options) =>
     const stream = cloudinary.uploader.upload_stream(
       options,
       (error, result) => {
-        if (error) return reject(error);
+        if (error) return reject(new Error("Cloudinary asset upload failed"));
         resolve(result);
       },
     );
 
     const source = streamifier.createReadStream(file.buffer);
     source.on("error", reject);
-    stream.on("error", reject);
+    stream.on("error", () => reject(new Error("Cloudinary asset upload failed")));
     source.pipe(stream);
   });
 
@@ -22,8 +22,8 @@ export const destroyCloudinaryAsset = async (publicId, options = {}) => {
 
   try {
     return await cloudinary.uploader.destroy(publicId, options);
-  } catch (error) {
-    console.error("Cloudinary cleanup failed:", error.message);
+  } catch {
+    console.error("Cloudinary cleanup failed");
     return null;
   }
 };

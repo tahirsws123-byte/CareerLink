@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Post from "../models/Post.js";
 import Group from "../models/Group.js";
 import Event from "../models/Event.js";
+import CompanyPage from "../models/CompanyPage.js";
 import User from "../models/User.js";
 import Connection, { makeConnectionPairKey } from "../models/Connection.js";
 import Comment from "../models/Comment.js";
@@ -168,7 +169,8 @@ const populatePost = (query) =>
       { path: "organizer", select: postAuthorFields },
       { path: "attendees", select: postAuthorFields },
     ],
-  }).populate("group", "name image privacy");
+  }).populate("group", "name image privacy")
+    .populate("companyPage", "name publicUrlSlug logo");
 
 const mediaCleanupItems = (post) => {
   const items = [];
@@ -380,12 +382,16 @@ export const voteOnPostPoll = async (req, res) => {
 
 export const getPosts = async (req, res) => {
   try {
+    const activeCompanyPages = await CompanyPage.distinct("_id", { active: { $ne: false } });
     const visibleGroups = await Group.find({
       $or: [{ privacy: "public" }, { members: req.user._id }],
     }).select("_id").lean();
     const posts = await populatePost(
       Post.find({
         groupPostStatus: { $nin: ["pending", "rejected"] },
+        $and: [
+          { $or: [{ companyPage: null }, { companyPage: { $in: activeCompanyPages } }] },
+        ],
         $or: [
           { group: null },
           { group: { $in: visibleGroups.map((group) => group._id) } },
@@ -755,7 +761,9 @@ export const repostPost = async (req, res) => {
       });
     }
 
-    const originalPost = await Post.findById(id).populate("author", postAuthorFields);
+    const originalPost = await Post.findById(id)
+      .populate("author", postAuthorFields)
+      .populate("companyPage", "owner");
 
     if (!originalPost) {
       return res.status(404).json({
@@ -772,18 +780,24 @@ export const repostPost = async (req, res) => {
       }
     }
     let repostGroup = null;
-    if (req.body.groupId) {
-      if (!mongoose.isValidObjectId(req.body.groupId)) {
+    const groupId = req.body?.groupId;
+    if (groupId) {
+      if (!mongoose.isValidObjectId(groupId)) {
         return res.status(400).json({ message: "Invalid group ID" });
       }
-      repostGroup = await Group.findById(req.body.groupId).select("owner members requirePostApproval contentReviewMode contentReviewCriteria notificationMembers");
+      repostGroup = await Group.findById(groupId).select("owner members requirePostApproval contentReviewMode contentReviewCriteria notificationMembers");
       if (!repostGroup) return res.status(404).json({ message: "Group not found" });
       if (!repostGroup.members.some((memberId) => memberId.toString() === req.user._id.toString())) {
         return res.status(403).json({ message: "Join the group before reposting" });
       }
     }
 
-    if (originalPost.author?._id?.toString() === req.user._id.toString()) {
+    const isCompanyPageOwnerPost =
+      originalPost.companyPage?.owner?.toString() === req.user._id.toString();
+    if (
+      originalPost.author?._id?.toString() === req.user._id.toString() &&
+      !isCompanyPageOwnerPost
+    ) {
       return res.status(400).json({
         message: "You cannot repost your own post",
       });
@@ -873,7 +887,7 @@ export const toggleLikePost = async (req, res) => {
       : { $addToSet: { likes: req.user._id } };
 
     const updatedPost = await populatePost(
-      Post.findByIdAndUpdate(post._id, update, { new: true }),
+      Post.findByIdAndUpdate(post._id, update, { returnDocument: "after" }),
     );
 
     if (alreadyLiked) {

@@ -256,7 +256,7 @@ export const markNotificationRead = async (req, res) => {
         read: true,
       },
       {
-        new: true,
+        returnDocument: "after",
       },
     ).populate("sender", senderFields).populate("job", "title company").populate("group", "name").populate("event", "title startsAt cancelledAt");
 

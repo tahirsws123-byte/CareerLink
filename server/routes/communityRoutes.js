@@ -7,14 +7,16 @@ import {
   reviewGroupJoinRequest, reviewGroupPost, toggleEventRsvp, toggleGroupMembership, toggleGroupPostPin, toggleGroupNotifications, toggleNewsletterSubscription,
   getGroupManagement, getGroupPostAnalytics, updateGroupManagement,
 } from "../controllers/communityController.js";
-import upload from "../middleware/uploadMiddleware.js";
+import { commentImageUpload, imageUpload } from "../middleware/uploadMiddleware.js";
+import { uploadRateLimit } from "../middleware/rateLimiters.js";
 
 const router = express.Router();
 router.use(Protect);
 router.get("/groups", listGroups);
 router.post(
   "/groups",
-  upload.fields([{ name: "image", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]),
+  uploadRateLimit,
+  imageUpload.fields([{ name: "image", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]),
   createGroup,
 );
 router.get("/groups/:groupId", getGroup);
@@ -23,7 +25,8 @@ router.get("/groups/:groupId/posts/:postId/analytics", getGroupPostAnalytics);
 router.patch("/groups/:groupId/manage", updateGroupManagement);
 router.put(
   "/groups/:groupId",
-  upload.fields([{ name: "image", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]),
+  uploadRateLimit,
+  imageUpload.fields([{ name: "image", maxCount: 1 }, { name: "coverImage", maxCount: 1 }]),
   updateGroup,
 );
 router.post("/groups/:groupId/requests/:userId", reviewGroupJoinRequest);
@@ -32,15 +35,15 @@ router.post("/groups/:groupId/posts/:postId/review", reviewGroupPost);
 router.post("/groups/:groupId/notifications", toggleGroupNotifications);
 router.post("/groups/:groupId/join", toggleGroupMembership);
 router.get("/events", listEvents);
-router.post("/events", upload.single("coverImage"), createEvent);
+router.post("/events", uploadRateLimit, imageUpload.single("coverImage"), createEvent);
 router.get("/events/:eventId/analytics/post", getEventPostAnalytics);
 router.get("/events/:eventId", getEvent);
-router.patch("/events/:eventId", upload.single("coverImage"), updateEvent);
+router.patch("/events/:eventId", uploadRateLimit, imageUpload.single("coverImage"), updateEvent);
 router.delete("/events/:eventId", deleteEvent);
 router.post("/events/:eventId/cancel", cancelEvent);
 router.post("/events/:eventId/report", reportEvent);
 router.post("/events/:eventId/attendees/:userId", updateEventAttendees);
-router.post("/events/:eventId/comments", upload.single("image"), addEventComment);
+router.post("/events/:eventId/comments", uploadRateLimit, commentImageUpload.single("image"), addEventComment);
 router.patch("/events/:eventId/comment-settings", updateEventCommentSettings);
 router.patch("/events/:eventId/comments/:commentId", updateEventComment);
 router.delete("/events/:eventId/comments/:commentId", deleteEventComment);

@@ -27,6 +27,9 @@ const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (character
 
 export const isNotificationEmailConfigured = hasMailConfig;
 
+export const shouldSendNotificationEmail = ({ enabled, recipient }) =>
+  Boolean(enabled && recipient && hasMailConfig());
+
 export const sendNotificationEmail = async ({ to, subject, text }) => {
   if (!hasMailConfig()) {
     throw new Error("Notification email is enabled but SMTP is not configured");

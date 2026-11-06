@@ -9,6 +9,7 @@ import {
   FileImage,
   Inbox,
   MoreHorizontal,
+  Building2,
   Archive,
   Paperclip,
   Pencil,
@@ -39,6 +40,7 @@ import {
   updateMessageAction,
 } from "../services/messageServices";
 import { emitUnreadCountsChanged } from "../utils/unreadEvents";
+import { getMyCompanyPages } from "../services/companyPageServices.js";
 
 export default function Messages() {
   const t = useTranslation();
@@ -50,6 +52,8 @@ export default function Messages() {
   const attachmentInputRef = useRef(null);
 
   const [conversations, setConversations] = useState([]);
+  const [companyPages, setCompanyPages] = useState([]);
+  const [companyPagesError, setCompanyPagesError] = useState("");
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [conversationFilter, setConversationFilter] = useState("");
@@ -80,6 +84,8 @@ export default function Messages() {
   const messagesScrollRef = useRef(null);
 
   const startUserId = searchParams.get("userId");
+  const startCompanyPageId = searchParams.get("companyPageId");
+  const startTopic = searchParams.get("topic");
 
   useEffect(() => {
     if (!attachment?.type.startsWith("image/")) {
@@ -106,6 +112,20 @@ export default function Messages() {
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    let active = true;
+    getMyCompanyPages()
+      .then((pages) => {
+        if (active) setCompanyPages(pages);
+      })
+      .catch((requestError) => {
+        if (active) setCompanyPagesError(requestError.response?.data?.message || "Unable to load your pages");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!composeOpen) return undefined;
@@ -153,7 +173,10 @@ export default function Messages() {
       if (!startUserId) return;
 
       try {
-        const conversation = await createOrGetConversation(startUserId);
+        const conversation = await createOrGetConversation(startUserId, startCompanyPageId ? {
+          companyPageId: startCompanyPageId,
+          companyPageTopic: startTopic,
+        } : {});
 
         if (!ignore) {
           await loadConversations({ silent: true });
@@ -169,7 +192,7 @@ export default function Messages() {
     return () => {
       ignore = true;
     };
-  }, [startUserId, navigate, loadConversations]);
+  }, [startUserId, startCompanyPageId, startTopic, navigate, loadConversations]);
 
   useEffect(() => {
     let ignore = false;
@@ -404,6 +427,8 @@ export default function Messages() {
       const result = await updateMessageAction(conversationId, messageId, payload);
       if (payload.action === "delete") {
         setMessages((current) => current.filter((message) => message._id !== messageId));
+        await loadConversations({ silent: true });
+        emitUnreadCountsChanged();
       } else if (payload.action === "reply" && result.message) {
         setMessages((current) => [...current, result.message]);
         setReplyingTo(null);
@@ -667,7 +692,7 @@ export default function Messages() {
           ))}
         </div>
         <aside
-          className={`${conversationId ? "hidden sm:block" : "block"} min-h-0 sm:col-span-4`}
+          className={`${conversationId ? "hidden sm:block" : "block"} min-h-0 sm:col-span-4 lg:col-span-3`}
         >
           <Card className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-t-none">
             {manageConversations && (
@@ -793,7 +818,7 @@ export default function Messages() {
         </aside>
 
         <main
-          className={`${conversationId ? "block" : "hidden sm:block"} min-h-0 sm:col-span-8`}
+          className={`${conversationId ? "block" : "hidden sm:block"} min-h-0 sm:col-span-8 lg:col-span-6`}
         >
           <Card className="flex h-full min-h-0 flex-col overflow-hidden">
             {activeConversation ? (
@@ -825,6 +850,7 @@ export default function Messages() {
                         {activeConversation.otherParticipant?.headline ||
                           "CareerLink member"}
                       </p>
+                      {activeConversation.companyPage && <p className="truncate text-xs font-medium text-brand">{activeConversation.companyPage.name}{activeConversation.companyPageTopic ? ` · ${activeConversation.companyPageTopic}` : ""}</p>}
                     </div>
                   </Link>
 
@@ -1062,7 +1088,7 @@ export default function Messages() {
                       <input
                         ref={attachmentInputRef}
                         type="file"
-                        accept="*/*"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/webm,video/quicktime,.pdf,.doc,.docx"
                         onChange={handleAttachmentChange}
                         className="hidden"
                       />
@@ -1118,6 +1144,37 @@ export default function Messages() {
             )}
           </Card>
         </main>
+
+        <aside className="hidden min-h-0 lg:col-span-3 lg:block">
+          <Card className="overflow-hidden">
+            <h2 className="border-b border-gray-100 px-4 py-4 text-base font-semibold text-ink">Page inboxes</h2>
+            {companyPagesError ? (
+              <p role="alert" className="px-4 py-4 text-sm text-red-600">{companyPagesError}</p>
+            ) : companyPages.length ? (
+              <nav aria-label="Company page inboxes" className="divide-y divide-gray-100">
+                {companyPages.map((page) => (
+                  <Link
+                    key={page._id}
+                    to={`/company-pages/${page._id}/manage?section=inbox`}
+                    className="flex items-center gap-3 px-4 py-3 transition hover:bg-gray-50"
+                  >
+                    {page.logo?.url ? (
+                      <img src={page.logo.url} alt="" className="h-8 w-8 shrink-0 rounded-sm object-cover" />
+                    ) : (
+                      <Building2 size={25} className="shrink-0 text-brand" />
+                    )}
+                    <span className="min-w-0 truncate text-sm font-semibold text-ink">{page.name}</span>
+                  </Link>
+                ))}
+              </nav>
+            ) : (
+              <div className="px-4 py-5">
+                <p className="text-sm text-muted-ink">Your company page inboxes will appear here.</p>
+                <Link to="/company-pages/create" className="mt-3 inline-block text-sm font-semibold text-brand hover:underline">Create a Company Page</Link>
+              </div>
+            )}
+          </Card>
+        </aside>
       </div>
     </div>
   );
