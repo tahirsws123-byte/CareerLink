@@ -4,6 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
+    "build": "node --check server.js && node --check app.js && node --check api/index.js",
     "dev": "nodemon server.js",
     "start": "node server.js",
     "test": "node --test"
