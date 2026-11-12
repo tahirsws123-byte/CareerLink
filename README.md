@@ -37,10 +37,10 @@ npm run build
 
 For a hosted demo, set `VITE_API_BASE_URL` to the backend URL ending in `/api`, and configure the backend MongoDB connection plus its frontend origin/CORS settings. Configure Google OAuth, email, or Cloudinary credentials only if you want to use those integrations. Keep secrets private and use values appropriate for your hosting environment.
 
-The backend exports its Express app through Vercel Functions and still starts a persistent server with `npm start`. To deploy it as a separate Vercel project:
+The backend exports its Express app for Vercel's native Express support and still starts a persistent server with `npm start`. To deploy it as a separate Vercel project:
 
 1. Set the Vercel project's **Root Directory** to `server`.
-2. Set **Framework Preset** to `Other`; leave **Build Command** and **Output Directory** unset. Vercel installs dependencies from `server/package.json` and deploys `server/api/` as functions. Do not use `npm run build` or configure a start command for this backend project.
+2. Let Vercel detect Express from `server.js`; leave **Build Command**, **Output Directory**, and **Install Command** unset. `server/vercel.json` intentionally contains no build or output overrides, so this project uses the Express defaults instead of the frontend configuration in the repository-root `vercel.json`. Vercel installs dependencies from `server/package.json` and serves the default-exported Express app. Do not set `npm run build` or configure a start command for this backend project.
 3. Add the required backend environment variables in Vercel, including `MONGO_URI`, `JWT_SECRET`, and `CORS_ORIGINS` (or `CLIENT_URL`) with the production frontend origin.
 4. Deploy the frontend separately and set its `VITE_API_BASE_URL` to the backend deployment URL ending in `/api`.
 
