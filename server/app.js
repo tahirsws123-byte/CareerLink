@@ -14,6 +14,7 @@ import connectdb from "./config/db.js";
 import { ensurePostIndexes } from "./utils/postIndexes.js";
 import { ensureUserIndexes } from "./utils/userIndexes.js";
 import { ensureCompanyPageIndexes } from "./utils/companyPageIndexes.js";
+import { runNetworkCatchup } from "./utils/networkCatchupScheduler.js";
 
 const app = express();
 let databaseInitialization;
@@ -47,6 +48,25 @@ app.use(async (_req, res, next) => {
   } catch (error) {
     console.error("API database initialization failed:", error.message);
     return res.status(503).json({ message: "Service temporarily unavailable" });
+  }
+});
+
+app.get("/api/cron/network-catchup", async (req, res) => {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error("Network catch-up endpoint is not configured: CRON_SECRET is missing.");
+    return res.status(503).json({ message: "Scheduled job is not configured" });
+  }
+  if (req.get("authorization") !== `Bearer ${cronSecret}`) {
+    return res.sendStatus(401);
+  }
+  
+  try {
+    await runNetworkCatchup();
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Network catch-up job failed:", error.message);
+    return res.status(500).json({ message: "Network catch-up job failed" });
   }
 });
 

@@ -1,3 +1,12 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "express",
+  "buildCommand": "npm run build",
+  "outputDirectory": null,
+  "crons": [
+    {
+      "path": "/api/cron/network-catchup",
+      "schedule": "0 * * * *"
+    }
+  ]
 }

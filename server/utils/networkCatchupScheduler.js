@@ -723,27 +723,29 @@ const sendWorkAnniversaryNotifications = async () => {
   lastAnniversaryRunDay = runDay;
 };
 
+let networkCatchupRun;
+export const runNetworkCatchup = () => {
+  if (!networkCatchupRun) {
+    networkCatchupRun = Promise.all([
+      sendWeeklySummaries(),
+      sendPostActivitySummaries(),
+      sendMessagingGroupSummaries(),
+      sendWorkAnniversaryNotifications(),
+      sendUpcomingEventReminders(),
+      sendProfileRecommendations(),
+      sendBirthdayAndRecommendationFlows(),
+    ]).finally(() => {
+      networkCatchupRun = undefined;
+    });
+  }
+
+  return networkCatchupRun;
+};
+
 export const startNetworkCatchupScheduler = () => {
-  let running = false;
-  const run = async () => {
-    if (running) return;
-    running = true;
-    try {
-      await Promise.all([
-        sendWeeklySummaries(),
-        sendPostActivitySummaries(),
-        sendMessagingGroupSummaries(),
-        sendWorkAnniversaryNotifications(),
-        sendUpcomingEventReminders(),
-        sendProfileRecommendations(),
-        sendBirthdayAndRecommendationFlows(),
-      ]);
-    } catch (error) {
-      console.error("Network catch-up scheduler failed:", error);
-    } finally {
-      running = false;
-    }
-  };
+  const run = () => runNetworkCatchup().catch((error) => {
+    console.error("Network catch-up scheduler failed:", error);
+  });
 
   void run();
   return setInterval(run, 60 * 60 * 1000);

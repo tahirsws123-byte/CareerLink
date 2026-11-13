@@ -1,3 +1,6 @@
+const deployedFrontendOrigin =
+  "https://careerlink-1eymtikjk-tahirsws123-4822s-projects.vercel.app";
+
 const normalizeOrigin = (value) => {
   if (typeof value !== "string" || !value.trim()) return null;
   try {
@@ -15,11 +18,13 @@ export const getAllowedOrigins = (env = process.env) => {
     env.FRONTEND_ORIGIN,
   ].map(normalizeOrigin).filter(Boolean);
 
-  if (configured.length) return new Set(configured);
-  if (env.NODE_ENV === "production") {
-    throw new Error("CORS_ORIGINS (or CLIENT_URL/FRONTEND_URL) must contain the production web origin");
-  }
-  return new Set(["http://localhost:5173", "http://127.0.0.1:5173"]);
+  const allowedOrigins = new Set([...configured, deployedFrontendOrigin]);
+  if (configured.length || env.NODE_ENV === "production") return allowedOrigins;
+  return new Set([
+    ...allowedOrigins,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+  ]);
 };
 
 export const createCorsOptions = (env = process.env) => {

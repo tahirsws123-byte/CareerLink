@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import AppRoutes from './routes/AppRoutes'
+import { Analytics } from "@vercel/analytics/react";
 
 function App() {
   useEffect(() => {
@@ -36,14 +37,19 @@ function App() {
     };
   }, []);
 
-  return <AppRoutes />
+  return (
+    <>
+      <AppRoutes />
+      <Analytics />
+    </>
+  )
 }
 
 function applyVideoPreference(video, autoplay) {
   video.autoplay = autoplay;
   if (autoplay) {
     video.muted = true;
-    video.play().catch(() => {});
+    video.play().catch(() => { });
   } else {
     video.pause();
   }
