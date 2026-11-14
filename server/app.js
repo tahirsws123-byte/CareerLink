@@ -1,12 +1,12 @@
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import express from "express";
+import cors from "cors";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, ".env") });
 
-import express from "express";
-import cors from "cors";
 import { createCorsOptions } from "./config/corsOptions.js";
 import { parseTrustedProxyHops } from "./config/trustProxy.js";
 import { securityHeaders } from "./middleware/securityHeaders.js";
@@ -16,7 +16,21 @@ import { ensureUserIndexes } from "./utils/userIndexes.js";
 import { ensureCompanyPageIndexes } from "./utils/companyPageIndexes.js";
 import { runNetworkCatchup } from "./utils/networkCatchupScheduler.js";
 
+import jobRoutes from "./routes/jobRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import postRoutes from "./routes/postRoutes.js";
+import commentRoutes from "./routes/commentRoutes.js";
+import connectionRoutes from "./routes/connectionRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+import messageRoutes from "./routes/messageRoutes.js";
+import articleRoutes from "./routes/articleRoutes.js";
+import communityRoutes from "./routes/communityRoutes.js";
+import searchRoutes from "./routes/searchRoutes.js";
+import companyPageRoutes from "./routes/companyPageRoutes.js";
+import moderationRoutes from "./routes/moderationRoutes.js";
+
 const app = express();
+const corsOptions = createCorsOptions();
 let databaseInitialization;
 
 export const initializeDatabase = () => {
@@ -31,17 +45,20 @@ export const initializeDatabase = () => {
       throw error;
     });
   }
-
   return databaseInitialization;
 };
 
 app.disable("x-powered-by");
 app.set("trust proxy", parseTrustedProxyHops(process.env.TRUST_PROXY_HOPS));
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
 app.use(securityHeaders);
-app.use(cors(createCorsOptions()));
 app.use(express.json({ limit: "1mb" }));
 
-app.use(async (_req, res, next) => {
+app.use(async (req, res, next) => {
+  if (req.method === "OPTIONS") return next();
   try {
     await initializeDatabase();
     return next();
@@ -60,7 +77,6 @@ app.get("/api/cron/network-catchup", async (req, res) => {
   if (req.get("authorization") !== `Bearer ${cronSecret}`) {
     return res.sendStatus(401);
   }
-  
   try {
     await runNetworkCatchup();
     return res.json({ success: true });
@@ -69,19 +85,6 @@ app.get("/api/cron/network-catchup", async (req, res) => {
     return res.status(500).json({ message: "Network catch-up job failed" });
   }
 });
-
-const { default: jobRoutes } = await import("./routes/jobRoutes.js");
-const { default: userRoutes } = await import("./routes/userRoutes.js");
-const { default: postRoutes } = await import("./routes/postRoutes.js");
-const { default: commentRoutes } = await import("./routes/commentRoutes.js");
-const { default: connectionRoutes } = await import("./routes/connectionRoutes.js");
-const { default: notificationRoutes } = await import("./routes/notificationRoutes.js");
-const { default: messageRoutes } = await import("./routes/messageRoutes.js");
-const { default: articleRoutes } = await import("./routes/articleRoutes.js");
-const { default: communityRoutes } = await import("./routes/communityRoutes.js");
-const { default: searchRoutes } = await import("./routes/searchRoutes.js");
-const { default: companyPageRoutes } = await import("./routes/companyPageRoutes.js");
-const { default: moderationRoutes } = await import("./routes/moderationRoutes.js");
 
 app.get(["/", "/api"], (_req, res) => {
   res.send("Server is running");

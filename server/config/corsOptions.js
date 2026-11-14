@@ -1,7 +1,7 @@
 const deployedFrontendOrigins = [
   "https://careerlink-1eymtikjk-tahirsws123-4822s-projects.vercel.app",
   "https://careerlink-nine.vercel.app",
-]
+];
 
 const normalizeOrigin = (value) => {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -36,5 +36,8 @@ export const createCorsOptions = (env = process.env) => {
       if (!origin || allowedOrigins.has(normalizeOrigin(origin))) return callback(null, true);
       return callback(null, false);
     },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   };
 };
