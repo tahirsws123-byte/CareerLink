@@ -438,9 +438,10 @@ const hasGoogleConfig = () =>
 
 const setGoogleStateCookie = (req, res, state, maxAge) => {
   const secure = req.secure || process.env.NODE_ENV === "production";
+  const callbackPath = new URL(getGoogleCallbackUrl(req)).pathname;
   res.append(
     "Set-Cookie",
-    `${GOOGLE_STATE_COOKIE}=${state}; Path=/api/users/auth/google/callback; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`,
+    `${GOOGLE_STATE_COOKIE}=${state}; Path=${callbackPath}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`,
   );
 };
 
