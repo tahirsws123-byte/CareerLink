@@ -11,6 +11,7 @@ export default defineConfig({
       "/api": {
         target: "https://career-link-dun.vercel.app",
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api(?=\/|$)/, "") || "/",
       },
     },
   },

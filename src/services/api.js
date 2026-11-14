@@ -1,9 +1,11 @@
 import axios from "axios";
 
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/?$/, "");
+
 const api = axios.create({
-  baseURL: import.meta.env.PROD
-    ? "https://career-link-dun.vercel.app/api"
-    : import.meta.env.VITE_API_BASE_URL || "/api",
+  baseURL: configuredApiBaseUrl || (import.meta.env.PROD
+    ? "https://career-link-dun.vercel.app"
+    : "/api"),
 });
 
 api.interceptors.request.use(

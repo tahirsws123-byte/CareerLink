@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
+import { apiPathMiddleware } from "./config/apiPath.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (process.env.NODE_ENV !== "production") {
@@ -54,6 +55,7 @@ app.disable("x-powered-by");
 app.set("trust proxy", parseTrustedProxyHops(process.env.TRUST_PROXY_HOPS));
 
 app.use(cors(corsOptions));
+app.use(apiPathMiddleware);
 app.use(securityHeaders);
 app.use(express.json({ limit: "1mb" }));
 
