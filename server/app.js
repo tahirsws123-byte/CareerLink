@@ -5,7 +5,9 @@ import express from "express";
 import cors from "cors";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, ".env") });
+if (process.env.NODE_ENV !== "production") {
+  dotenv.config({ path: path.join(__dirname, ".env") });
+}
 
 import { createCorsOptions } from "./config/corsOptions.js";
 import { parseTrustedProxyHops } from "./config/trustProxy.js";
@@ -52,10 +54,12 @@ app.disable("x-powered-by");
 app.set("trust proxy", parseTrustedProxyHops(process.env.TRUST_PROXY_HOPS));
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
-
 app.use(securityHeaders);
 app.use(express.json({ limit: "1mb" }));
+
+app.get(["/", "/api"], (_req, res) => {
+  res.status(200).json({ status: "ok", message: "Server is running" });
+});
 
 app.use(async (req, res, next) => {
   if (req.method === "OPTIONS") return next();
@@ -67,6 +71,7 @@ app.use(async (req, res, next) => {
     return res.status(503).json({ message: "Service temporarily unavailable" });
   }
 });
+
 
 app.get("/api/cron/network-catchup", async (req, res) => {
   const cronSecret = process.env.CRON_SECRET;
@@ -86,10 +91,6 @@ app.get("/api/cron/network-catchup", async (req, res) => {
   }
 });
 
-app.get(["/", "/api"], (_req, res) => {
-  res.send("Server is running");
-});
-
 app.use("/api/users", userRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/posts", postRoutes);
@@ -102,5 +103,12 @@ app.use("/api/community", communityRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/company-pages", companyPageRoutes);
 app.use("/api/moderation", moderationRoutes);
+
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
 
 export default app;
