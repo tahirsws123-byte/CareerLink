@@ -1,5 +1,7 @@
-const deployedFrontendOrigin =
-  "https://careerlink-1eymtikjk-tahirsws123-4822s-projects.vercel.app";
+const deployedFrontendOrigins = [
+  "https://careerlink-1eymtikjk-tahirsws123-4822s-projects.vercel.app",
+  "https://careerlink-nine.vercel.app",
+]
 
 const normalizeOrigin = (value) => {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -18,7 +20,7 @@ export const getAllowedOrigins = (env = process.env) => {
     env.FRONTEND_ORIGIN,
   ].map(normalizeOrigin).filter(Boolean);
 
-  const allowedOrigins = new Set([...configured, deployedFrontendOrigin]);
+  const allowedOrigins = new Set([...configured, ...deployedFrontendOrigins]);
   if (configured.length || env.NODE_ENV === "production") return allowedOrigins;
   return new Set([
     ...allowedOrigins,

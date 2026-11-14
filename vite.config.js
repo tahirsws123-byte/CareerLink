@@ -9,8 +9,8 @@ export default defineConfig({
     host: "0.0.0.0",
     proxy: {
       "/api": {
-        target: "http://localhost:5000",
-        changeOrigin: false,
+        target: "https://career-link-dun.vercel.app",
+        changeOrigin: true,
       },
     },
   },
