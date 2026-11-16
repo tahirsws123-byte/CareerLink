@@ -57,7 +57,7 @@ export default function TopProfileCompose({ onPost }) {
 
       <div className="p-3 text-center">
         <h2 className="font-semibold text-base">{user?.name}</h2>
-        <p className="text-sm text-gray-500">{user?.headline || "Full Stack Developer"}</p>
+        <p className="text-sm text-gray-500">{user?.headline || ""}</p>
 
         <div className="mt-3 flex items-center justify-center gap-3">
           <div className="rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
