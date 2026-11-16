@@ -190,13 +190,13 @@ export default function MeDropdown({
               </div>
             </div>
 
-            <Link
+            {/* <Link
               to={`/profile/${user?._id}`}
               onClick={closeMenu}
               className="mt-4 block rounded-full border border-[#0A66C2] py-2 text-center text-sm font-semibold text-[#0A66C2] hover:bg-blue-50"
             >
               {translate("View Profile", language)}
-            </Link>
+            </Link> */}
           </div>
 
           <hr />
@@ -264,14 +264,14 @@ export default function MeDropdown({
 
           <hr />
 
-          <div className="py-2">
+          {/* <div className="py-2">
             <button
               onClick={handleLogout}
               className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
             >
               {translate("Sign Out", language)}
             </button>
-          </div>
+          </div> */}
         </div>
       )}
     </div>
