@@ -106,10 +106,10 @@ export default function ProfileCard({
           </div>
         )}
 
-        <h2 className="mt-2 max-w-full truncate font-semibold">{user?.name || "Saad Khan"}</h2>
+        <h2 className="mt-2 max-w-full truncate font-semibold">{user?.name || "User"}</h2>
 
         <p className="text-center text-sm text-gray-500">
-          {user?.headline || "Full Stack Developer"}
+          {user?.headline}
         </p>
         {user?.location && (
           <p className="mt-1 inline-flex items-center gap-1 text-center text-xs text-gray-500">
