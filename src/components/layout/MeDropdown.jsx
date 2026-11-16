@@ -40,7 +40,7 @@ const getAvatarColor = (name) => {
 export default function MeDropdown({
   compact = false,
   mobile = false,
-  onNavigate = () => {},
+  onNavigate = () => { },
 }) {
   const { user, logout } = useAuth();
   const language = user?.preferredLanguage || "en";
@@ -122,9 +122,8 @@ export default function MeDropdown({
             aria-label={translate("Open account menu", language)}
             aria-expanded={open}
             aria-haspopup="menu"
-            className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium transition ${
-              open ? "bg-sky text-brand" : "text-ink hover:bg-sky"
-            }`}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium transition ${open ? "bg-sky text-brand" : "text-ink hover:bg-sky"
+              }`}
           >
             <ProfileAvatar user={user} size={30} />
             <span className="flex-1">{translate("Me", language)}</span>
@@ -157,11 +156,10 @@ export default function MeDropdown({
 
       {open && (
         <div
-          className={`z-50 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl ${
-            mobile
-              ? "relative mt-2 max-h-[min(65vh,520px)] w-full"
-              : "absolute right-0 mt-2 w-[min(280px,calc(100vw-2rem))]"
-          }`}
+          className={`z-50 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl ${mobile
+            ? "relative mt-2 max-h-[min(65vh,520px)] w-full"
+            : "absolute right-0 mt-2 w-[min(280px,calc(100vw-2rem))]"
+            }`}
         >
           {/* Top */}
 
@@ -190,13 +188,15 @@ export default function MeDropdown({
               </div>
             </div>
 
-            {/* <Link
-              to={`/profile/${user?._id}`}
-              onClick={closeMenu}
-              className="mt-4 block rounded-full border border-[#0A66C2] py-2 text-center text-sm font-semibold text-[#0A66C2] hover:bg-blue-50"
-            >
-              {translate("View Profile", language)}
-            </Link> */}
+            {!mobile && (
+              <Link
+                to={`/profile/${user?._id}`}
+                onClick={closeMenu}
+                className="mt-4 block rounded-xl border border-brand/30 py-2.5 text-center text-sm font-semibold text-brand transition hover:bg-sky"
+              >
+                {translate("View Profile", language)}
+              </Link>
+            )}
           </div>
 
           <hr />
@@ -264,14 +264,19 @@ export default function MeDropdown({
 
           <hr />
 
-          {/* <div className="py-2">
-            <button
-              onClick={handleLogout}
-              className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-gray-100"
-            >
-              {translate("Sign Out", language)}
-            </button>
-          </div> */}
+          {!mobile && (
+            <>
+              <hr className="border-gray-100" />
+              <div className="py-2">
+                <button
+                  onClick={handleLogout}
+                  className="block w-full rounded-lg px-4 py-2.5 text-left text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                >
+                  {translate("Sign Out", language)}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
